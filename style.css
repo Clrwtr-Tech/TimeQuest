@@ -1,0 +1,365 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100vh;
+    overflow: hidden;
+    position: relative; /* Add this to manage overlay positioning */
+}
+
+.menu-header, .user-card, .date-card, .undo-container, .projects-card {
+    width: 90%; /* Use a percentage to make the layout responsive */
+    max-width: 600px; /* Limit the max width for larger screens */
+    margin: 10px 0; /* Consistent spacing */
+}
+
+.menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+}
+
+.menu-icon{
+    font-size: 2em;
+    margin: 0 8px;
+    cursor: pointer;
+}
+
+.edit-icon {
+    font-size: 1.4em;
+    margin: 0 8px;
+    cursor: pointer;
+}
+
+.screen-title {
+    font-size: 1.2em;
+    font-weight: bold;
+}
+
+.edit-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background-color: #ddd;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.edit-button.active {
+    background-color: #ffeb3b; /* Yellow background to indicate edit mode */
+}
+
+.user-card {
+    display: flex;
+    align-items: center;
+    background-color: #fff;
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    justify-content: space-between;
+}
+
+.projects-card {
+    flex-grow: 1; /* Allow the projects container to grow */
+    overflow-y: auto; /* Scroll if content overflows */
+    overflow-x: hidden; /* Prevent horizontal scrolling */
+    height: calc(100vh - 300px); /* Adjust the height based on other components */
+}
+
+.undo-container {
+    display: flex;
+    justify-content: space-between; /* Evenly spaced buttons */
+    margin: 20px 0; /* Consistent spacing */
+}
+
+.undo-button, .new-project-button {
+    flex: 1;
+    background-color: #f28b82;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    margin: 0 10px; /* Space between buttons */
+    text-align: center;
+    text-wrap: nowrap;
+}
+
+.new-project-button {
+    background-color: #6ac46a;
+    color: white;
+}
+
+.undo-button:hover {
+    background-color: #e57373;
+}
+
+.new-project-button:hover {
+    background-color: #5fb96b;
+}
+
+.user-card img {
+    width: 80px;
+    height: 80px;
+    border-radius: 15%;
+    margin-right: 15px;
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    flex-grow: 1;
+}
+
+.user-info h2 {
+    margin: 0;
+    font-size: 1.2em;
+}
+
+.details-container {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row; /* Can change to column if needed */
+    align-items: center;
+    margin-top: 10px;
+}
+
+.hearts-container {
+    display: flex;
+}
+
+.heart {
+    font-size: 20px;
+}
+
+.points {
+    display: flex;
+    align-items: baseline;
+    margin-left: 10px;
+}
+
+.points span {
+    margin-left: 5px;
+    font-size: 1.2em;
+}
+
+.project-card {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    box-sizing: border-box; /* Include padding and border in the width */
+}
+
+.project-card:hover {
+    background-color: #f0f0f0;
+}
+
+.project-card h3 {
+    margin: 0;
+    font-size: 1em;
+}
+
+.project-card p {
+    margin: 0;
+    font-size: 1em;
+    display: flex;
+    align-items: center;
+}
+
+.date-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #fff;
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 10px 0;
+}
+
+.date-navigation {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+
+.arrow {
+    font-size: 1.5em;
+    cursor: pointer;
+    user-select: none;
+    padding: 0 10px;
+}
+
+.date-display {
+    font-size: 1.2em;
+    margin: 0 10px;
+}
+
+.token-overview {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.token {
+    font-size: 1.5em;
+    margin: 2px;
+    width: 11%; /* Ensures 8 tokens per row in a 400px container */
+    text-align: center;
+}
+
+.total-hours {
+    margin-top: 10px;
+    font-size: 0.8em;
+    color: #555;
+}
+
+/* Modal */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgb(0, 0, 0);
+    background-color: rgba(0, 0, 0, 0.4);
+    padding-top: 60px;
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 10px;
+}
+
+.close-button {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+#new-project-form {
+    display: flex;
+    flex-direction: column;
+}
+
+#new-project-form label {
+    margin-bottom: 10px;
+}
+
+#new-project-form input {
+    margin-bottom: 20px;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+}
+
+#new-project-form button {
+    padding: 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+#new-project-form button:hover {
+    background-color: #45a049;
+}
+
+.app-container {
+    display: none; /* Initially hide the app content */
+}
+
+/* Login Screen Styles */
+.login-container {
+    position: fixed; /* Fixed positioning for overlay */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.9); /* Slight transparency for effect */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    z-index: 1000; /* Ensure it's on top */
+    padding-top: 25%;
+}
+
+.login-container h1 {
+    font-size: 5em;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+#login-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#login-form label, #login-form input {
+    width: 100%;
+    max-width: 300px;
+    margin-bottom: 15px;
+}
+
+#login-form input {
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+}
+
+#login-form button {
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+#login-form button:hover {
+    background-color: #45a049;
+}

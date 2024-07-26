@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NocoDB User Data Fetcher</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="login-container" class="login-container">
+        <h1>Time Quest</h1>
+        <form id="login-form">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+
+<div id="menu-header" class="menu-header">
+    <span id="menu-icon" class="menu-icon">≡</span>
+    <span id="screen-title" class="screen-title">Quests</span>
+    <div id="edit-button" class="edit-button">
+        <span id="edit-icon" class="edit-icon">✏️</span>
+    </div>
+</div>
+
+<div id="user-container" class="user-card"></div>
+
+<div id="date-container" class="date-card">
+    <div id="date-navigation" class="date-navigation">
+        <span id="prev-arrow" class="arrow">⬅️</span>
+         <span id="date-display" class="date-display"></span>
+        <span id="next-arrow" class="arrow">➡️</span>
+    </div>
+    <div id="token-overview" class="token-overview"></div>
+    <div id="total-hours" class="total-hours"></div>
+</div>
+
+<div id="undo-container" class="undo-container">
+    <button id="undo-button" class="undo-button">Undo Token</button>
+    <button id="new-project-button" class="new-project-button">New Project</button>
+</div>
+<div id="projects-container" class="projects-card"></div>
+
+<!-- New Project Modal -->
+<div id="new-project-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2>Create New Project</h2>
+        <form id="new-project-form">
+            <label for="project-name">Project Name:</label>
+            <input type="text" id="project-name" name="project-name" required>
+            <button type="submit">Create Project</button>
+        </form>
+    </div>
+</div>
+
+    <script src="fetchData.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

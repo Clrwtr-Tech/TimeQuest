@@ -112,7 +112,15 @@ function displayUserData(user, container) {
     container.innerHTML = ''; // Clear any existing content
 
     const userImage = document.createElement('img');
-    userImage.src = user.ImageURL;
+    if (user.profileimage && user.profileimage.length > 0) {
+        const profileImageData = user.profileimage[0];
+        const baseUrl = 'https://nocodb-production-fc9f.up.railway.app/'; // Replace with the actual base URL for your images
+        const imageUrl = baseUrl + profileImageData.path; // Or use signedPath if needed
+
+        userImage.src = imageUrl;
+    } else {
+        userImage.src = 'default-profile-image-url'; // Fallback to a default image URL if profileimage is not available
+    }
     userImage.alt = user.username;
 
     const userInfo = document.createElement('div');
@@ -155,6 +163,7 @@ function displayUserData(user, container) {
     container.appendChild(userImage);
     container.appendChild(userInfo);
 }
+
 
 async function updateProjects(displayDate, userDetails) {
     const projectsContainer = document.getElementById('projects-container');

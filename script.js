@@ -1,23 +1,71 @@
-const HOURS_IN_WORKDAY = 8;
-const TOKENS_PER_DAY = 16;
-const HOURS_PER_TOKEN = HOURS_IN_WORKDAY / TOKENS_PER_DAY;
+let HOURS_IN_WORKDAY = 8;
+let TOKENS_PER_DAY = 16;
+let HOURS_PER_TOKEN = HOURS_IN_WORKDAY / TOKENS_PER_DAY;
 
 let displayDate = new Date();
 let userDetails;
 
 let username;
 
+function updateGlobalConstants(user) {
+    HOURS_IN_WORKDAY = user.workday;
+    HOURS_PER_TOKEN = parseFloat(user.unittime);
+    TOKENS_PER_DAY = HOURS_IN_WORKDAY / HOURS_PER_TOKEN;
+}
+
 // Define functions globally or at the top level
 function updateDateDisplay() {
     const dateDisplay = document.getElementById('date-display');
-    if (!dateDisplay) {
-        console.error('Date display element not found.');
+    const dateContainer = document.getElementById('date-container');
+    if (!dateDisplay || !dateContainer) {
+        console.error('Date display or container element not found.');
         return;
     }
 
     const options = { month: 'short', day: 'numeric' };
     dateDisplay.textContent = displayDate.toLocaleDateString('en-US', options);
+
+    const dayOfWeek = displayDate.getDay(); // 0 (Sunday) to 6 (Saturday)
+    const workweek = userDetails.workweek || 'monday,tuesday,wednesday,thursday,friday'; // Default workweek as string
+
+    // Map day names to numbers
+    const dayMap = {
+        'sunday': 0,
+        'monday': 1,
+        'tuesday': 2,
+        'wednesday': 3,
+        'thursday': 4,
+        'friday': 5,
+        'saturday': 6
+    };
+
+    // Convert workweek string to array of numbers
+    const workweekArray = workweek.toLowerCase().split(',').map(day => dayMap[day.trim()]);
+
+    // Check if the current day is a non-working day
+    if (workweekArray.includes(dayOfWeek)) {
+        dateContainer.classList.remove('non-working-day', 'today');
+        dateContainer.classList.add('working-day');
+    } else {
+        dateContainer.classList.remove('working-day', 'today');
+        dateContainer.classList.add('non-working-day');
+    }
+
+    // Check if the displayed date is today
+    if (isToday(displayDate)) {
+        dateContainer.classList.add('today');
+    } else {
+        dateContainer.classList.remove('today');
+    }
 }
+
+function isToday(someDate) {
+    const today = new Date();
+    return someDate.getDate() === today.getDate() &&
+        someDate.getMonth() === today.getMonth() &&
+        someDate.getFullYear() === today.getFullYear();
+}
+
 
 function changeDate(days) {
     displayDate.setDate(displayDate.getDate() + days);
@@ -69,6 +117,7 @@ async function initializeApp() {
 
         if (user) {
             userDetails = await fetchUserById(user.Id);
+            updateGlobalConstants(userDetails); // Update global constants based on user details
             displayUserData(userDetails, userContainer);
             
             // Set initial date display
@@ -84,6 +133,7 @@ async function initializeApp() {
         userContainer.textContent = 'No username entered';
     }
 }
+
 
 async function authenticateUser(username, password) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records?where=(username,eq,${username})`;
@@ -106,7 +156,6 @@ async function authenticateUser(username, password) {
 
     return user && user.Password === password;
 }
-
 
 function displayUserData(user, container) {
     container.innerHTML = ''; // Clear any existing content
@@ -163,7 +212,6 @@ function displayUserData(user, container) {
     container.appendChild(userImage);
     container.appendChild(userInfo);
 }
-
 
 async function updateProjects(displayDate, userDetails) {
     const projectsContainer = document.getElementById('projects-container');
@@ -225,9 +273,6 @@ async function handleProjectClick(projectId) {
         nc_da8u___Projects_id: projectId.Id
     };
 
-    // Log tokenData to ensure it's correctly structured
-    //console.log('Token Data:', tokenData);
-
     await sendTokenData(tokenData);
 
     // Determine points based on token type
@@ -243,6 +288,7 @@ async function handleProjectClick(projectId) {
     await updateProjects(displayDate, userDetails);
     await updateTokenOverview(displayDate, userDetails);
 }
+
 
 function isToday(someDate) {
     const today = new Date();
@@ -277,8 +323,6 @@ async function updateTokenOverview(displayDate, userDetails) {
     const daysAgo = Math.floor((currentDate - displayDate) / (1000 * 60 * 60 * 24));
 
     const tokenCounts = await fetchDetailedTokenCountsByDate(userDetails.UserID, daysAgo);
-    //console.log('Token counts:', tokenCounts); // Log the token counts for debugging
-    
     const ontimeCount = tokenCounts.Ontime || 0;
     const lateCount = tokenCounts.Late || 0;
     const totalUsedTokens = ontimeCount + lateCount;
@@ -306,6 +350,7 @@ async function updateTokenOverview(displayDate, userDetails) {
     // Update total hours text
     totalHoursText.textContent = `Total hours tracked: ${totalHoursTracked.toFixed(1)} hours`;
 }
+
 
 async function updateUserPoints(userId, newPoints) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;

@@ -363,3 +363,15 @@ body {
 #login-form button:hover {
     background-color: #45a049;
 }
+
+.non-working-day {
+    background-color: #dbdbdb; /* Light yellow for non-working days */
+}
+
+.working-day {
+    background-color: #afe8fa; /* Default background color */
+}
+
+.today {
+    background-color: #fffec5; /* Light blue background for today's date */
+}

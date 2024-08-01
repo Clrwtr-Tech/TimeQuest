@@ -66,7 +66,6 @@ function isToday(someDate) {
         someDate.getFullYear() === today.getFullYear();
 }
 
-
 function changeDate(days) {
     displayDate.setDate(displayDate.getDate() + days);
     updateDateDisplay();
@@ -126,6 +125,12 @@ async function initializeApp() {
             // Fetch and update projects and token overview initially
             await updateProjects(displayDate, userDetails);
             await updateTokenOverview(displayDate, userDetails);
+
+            // Check hearts penalty
+            await checkHeartsPenalty();
+
+            // Initialize modal functionality
+            initializeModal();
         } else {
             userContainer.textContent = 'User not found';
         }
@@ -133,7 +138,6 @@ async function initializeApp() {
         userContainer.textContent = 'No username entered';
     }
 }
-
 
 async function authenticateUser(username, password) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records?where=(username,eq,${username})`;
@@ -289,7 +293,6 @@ async function handleProjectClick(projectId) {
     await updateTokenOverview(displayDate, userDetails);
 }
 
-
 function isToday(someDate) {
     const today = new Date();
     return someDate.getDate() === today.getDate() &&
@@ -350,7 +353,6 @@ async function updateTokenOverview(displayDate, userDetails) {
     // Update total hours text
     totalHoursText.textContent = `Total hours tracked: ${totalHoursTracked.toFixed(1)} hours`;
 }
-
 
 async function updateUserPoints(userId, newPoints) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
@@ -555,6 +557,39 @@ function generateProjectID(name) {
     // Generate a simple ProjectID based on the project name, truncated and sanitized
     return name.replace(/\s+/g, '').substring(0, 6).toUpperCase();
 }
+//Duplicate createNewProject function Figure out which one is the right one!
+async function createNewProject(projectName) {
+    const workspaceId = await fetchWorkspaceId();
+    const projectId = generateProjectID(projectName);
+
+    const projectData = {
+        Name: projectName,
+        ProjectID: projectId,
+        Archived: false,
+        nc_da8u___Workspace_id: workspaceId
+    };
+
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/records`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        },
+        body: JSON.stringify(projectData)
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to create new project');
+    }
+
+    const newProject = await response.json();
+    //console.log('New project created:', newProject);
+
+    // Link the new project with the current user
+    await linkUserToProject(userDetails.Id, newProject.Id);
+}
 
 async function createNewProject(projectName) {
     const workspaceId = await fetchWorkspaceId();
@@ -587,6 +622,12 @@ async function createNewProject(projectName) {
 
     // Link the new project with the current user
     await linkUserToProject(userDetails.Id, newProject.Id);
+
+    // Re-fetch the updated user details
+    userDetails = await refetchUserDetails(userDetails.Id);
+
+    // Update the projects display
+    await updateProjects(displayDate, userDetails);
 }
 
 async function linkUserToProject(userId, projectId) {
@@ -629,41 +670,178 @@ async function refetchUserDetails(userId) {
     return await response.json();
 }
 
-async function createNewProject(projectName) {
-    const workspaceId = await fetchWorkspaceId();
-    const projectId = generateProjectID(projectName);
+async function checkHeartsPenalty() {
+    const penaltyCheckDate = userDetails.penaltycheckdate ? new Date(userDetails.penaltycheckdate) : null;
+    const currentDate = new Date();
+    const previousDate = new Date(currentDate);
+    previousDate.setDate(currentDate.getDate() - 1);
 
-    const projectData = {
-        Name: projectName,
-        ProjectID: projectId,
-        Archived: false,
-        nc_da8u___Workspace_id: workspaceId
+    let startDate;
+    if (penaltyCheckDate) {
+        startDate = penaltyCheckDate;
+    } else {
+        startDate = previousDate;
+        await updatePenaltyCheckDate(userDetails.Id, currentDate); // Initialize penalty check date to current date
+    }
+
+    const workweek = userDetails.workweek || 'monday,tuesday,wednesday,thursday,friday'; // Default workweek as string
+    const dayMap = {
+        'sunday': 0,
+        'monday': 1,
+        'tuesday': 2,
+        'wednesday': 3,
+        'thursday': 4,
+        'friday': 5,
+        'saturday': 6
+    };
+    const workweekArray = workweek.toLowerCase().split(',').map(day => dayMap[day.trim()]);
+
+    // Fetch token counts for each date from startDate to previousDate
+    let totalTokens = 0;
+    let trackedTokens = 0;
+
+    for (let date = new Date(startDate); date <= previousDate; date.setDate(date.getDate() + 1)) {
+        const dayOfWeek = date.getDay();
+        if (!workweekArray.includes(dayOfWeek)) {
+            continue; // Skip non-working days
+        }
+
+        const daysAgo = Math.floor((currentDate - date) / (1000 * 60 * 60 * 24));
+        const tokenCounts = await fetchDetailedTokenCountsByDate(userDetails.UserID, daysAgo);
+        totalTokens += TOKENS_PER_DAY;
+        trackedTokens += (tokenCounts.Ontime || 0) + (tokenCounts.Late || 0);
+    }
+
+    const trackedPercentage = (trackedTokens / totalTokens) * 100;
+
+    if (trackedPercentage < 75) {
+        userDetails.Hearts = Math.max(userDetails.Hearts - 1, 0);
+        await updateUserHearts(userDetails.Id, userDetails.Hearts);
+        updateHeartsDisplay(userDetails.Hearts);
+
+        if (userDetails.Hearts === 0) {
+            userDetails.Skull = (userDetails.Skull || 0) + 1;
+            userDetails.Hearts = 5;
+            await updateUserSkullsAndHearts(userDetails.Id, userDetails.Skull, userDetails.Hearts);
+            updateHeartsDisplay(userDetails.Hearts);
+        }
+    }
+
+    // Update penalty check date to current date
+    await updatePenaltyCheckDate(userDetails.Id, currentDate);
+}
+
+async function updateUserHearts(userId, newHearts) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
+    const patchData = {
+        Id: userId,
+        Hearts: newHearts
     };
 
-    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/records`;
-
     const response = await fetch(url, {
-        method: 'POST',
+        method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
             'xc-token': token
         },
-        body: JSON.stringify(projectData)
+        body: JSON.stringify(patchData)
     });
 
     if (!response.ok) {
-        throw new Error('Failed to create new project');
+        throw new Error('Failed to update user hearts');
     }
 
-    const newProject = await response.json();
-    //console.log('New project created:', newProject);
+    return await response.json();
+}
 
-    // Link the new project with the current user
-    await linkUserToProject(userDetails.Id, newProject.Id);
+async function updatePenaltyCheckDate(userId, newDate) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
+    const patchData = {
+        Id: userId,
+        penaltycheckdate: newDate.toISOString().split('T')[0]
+    };
 
-    // Re-fetch the updated user details
-    userDetails = await refetchUserDetails(userDetails.Id);
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        },
+        body: JSON.stringify(patchData)
+    });
 
-    // Update the projects display
-    await updateProjects(displayDate, userDetails);
+    if (!response.ok) {
+        throw new Error('Failed to update penalty check date');
+    }
+
+    return await response.json();
+}
+
+function updateHeartsDisplay(newHearts) {
+    const heartsContainer = document.querySelector('.hearts-container');
+    heartsContainer.innerHTML = ''; // Clear existing hearts
+
+    const totalHearts = 5;
+    for (let i = 0; i < totalHearts; i++) {
+        const heart = document.createElement('span');
+        heart.textContent = i < newHearts ? '❤️' : '🖤';
+        heart.classList.add('heart');
+        heartsContainer.appendChild(heart);
+    }
+}
+
+async function updateUserSkullsAndHearts(userId, newSkulls, newHearts) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
+    const patchData = {
+        Id: userId,
+        Skull: newSkulls,
+        Hearts: newHearts
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        },
+        body: JSON.stringify(patchData)
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to update user skulls and hearts');
+    }
+
+    return await response.json();
+}
+
+function initializeModal() {
+    const userImage = document.querySelector('.user-card img');
+    const modal = document.getElementById('stats-modal');
+    const closeButton = document.querySelector('.close-button');
+    const totalPointsElement = document.getElementById('total-points');
+    const totalSkullsElement = document.getElementById('total-skulls');
+
+    if (userImage) {
+        userImage.addEventListener('click', () => {
+            totalPointsElement.textContent = `⭐ x${userDetails.Points || 0}`;
+            totalSkullsElement.textContent = `💀 x${userDetails.Skull || 0}`;
+            modal.style.display = 'block';
+        });
+    } else {
+        console.error('User image element not found.');
+    }
+
+    if (closeButton) {
+        closeButton.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+    } else {
+        console.error('Close button element not found.');
+    }
+
+    window.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
 }

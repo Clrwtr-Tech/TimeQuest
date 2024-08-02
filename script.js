@@ -4,8 +4,12 @@ let HOURS_PER_TOKEN = HOURS_IN_WORKDAY / TOKENS_PER_DAY;
 
 let displayDate = new Date();
 let userDetails;
-
 let username;
+
+const BADGE_LEVELS = [50, 250, 500, 1000, 2000, 4000];
+const BADGE_EMOJIS = ['🥉', '🥈', '🥇', '🏅', '🏆', '🎖️'];
+const notificationQueue = [];
+let isNotificationActive = false;
 
 function updateGlobalConstants(user) {
     HOURS_IN_WORKDAY = user.workday;
@@ -116,6 +120,7 @@ async function initializeApp() {
 
         if (user) {
             userDetails = await fetchUserById(user.Id);
+            userDetails.notifiedBadges = user.notifiedBadges || ''; // Ensure notifiedBadges is initialized
             updateGlobalConstants(userDetails); // Update global constants based on user details
             displayUserData(userDetails, userContainer);
             
@@ -128,6 +133,9 @@ async function initializeApp() {
 
             // Check hearts penalty
             await checkHeartsPenalty();
+
+            // Check and update badges
+            await checkAndUpdateBadges();
 
             // Initialize modal functionality
             initializeModal();
@@ -412,6 +420,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     closeModalButton.addEventListener('click', () => {
         newProjectModal.style.display = 'none';
+    });
+
+    window.addEventListener('click', (event) => {
+        if (event.target === newProjectModal) {
+            newProjectModal.style.display = 'none';
+        }
     });
 
     newProjectForm.addEventListener('submit', async (event) => {
@@ -715,21 +729,25 @@ async function checkHeartsPenalty() {
     const trackedPercentage = (trackedTokens / totalTokens) * 100;
 
     if (trackedPercentage < 75) {
-        userDetails.Hearts = Math.max(userDetails.Hearts - 1, 0);
-        await updateUserHearts(userDetails.Id, userDetails.Hearts);
-        updateHeartsDisplay(userDetails.Hearts);
-
-        if (userDetails.Hearts === 0) {
+        if (userDetails.Hearts === 1) {
             userDetails.Skull = (userDetails.Skull || 0) + 1;
             userDetails.Hearts = 5;
             await updateUserSkullsAndHearts(userDetails.Id, userDetails.Skull, userDetails.Hearts);
             updateHeartsDisplay(userDetails.Hearts);
+            showNotification('Your last heart is gone 💀! Your hearts have been refilled.');
+        } else {
+            userDetails.Hearts = Math.max(userDetails.Hearts - 1, 0);
+            await updateUserHearts(userDetails.Id, userDetails.Hearts);
+            updateHeartsDisplay(userDetails.Hearts);
+            showNotification('Oh no! You lost a heart ❤️');
         }
     }
 
     // Update penalty check date to current date
     await updatePenaltyCheckDate(userDetails.Id, currentDate);
 }
+
+
 
 async function updateUserHearts(userId, newHearts) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
@@ -814,34 +832,126 @@ async function updateUserSkullsAndHearts(userId, newSkulls, newHearts) {
     return await response.json();
 }
 
+async function checkAndUpdateBadges() {
+    const currentPoints = userDetails.Points;
+    const earnedBadges = BADGE_LEVELS.filter(level => currentPoints >= level);
+    const previousBadges = userDetails.Badges || [];
+    const notifiedBadges = userDetails.notifiedBadges ? userDetails.notifiedBadges.split(',').map(Number) : [];
+
+    userDetails.Badges = earnedBadges; // Store earned badges in userDetails
+    const newNotifiedBadges = [...new Set([...notifiedBadges, ...earnedBadges.filter(badge => !notifiedBadges.includes(badge))])];
+    userDetails.notifiedBadges = newNotifiedBadges.join(',');
+    await updateUserNotifiedBadges(userDetails.Id, userDetails.notifiedBadges);
+    updateBadgesDisplay(earnedBadges);
+
+    // Find new badges earned since last check
+    const newBadges = earnedBadges.filter(badge => !notifiedBadges.includes(badge));
+    newBadges.forEach(badge => {
+        const badgeIndex = BADGE_LEVELS.indexOf(badge);
+        if (badgeIndex !== -1) {
+            showNotification(`Congrats! You earned a ${BADGE_LEVELS[badgeIndex]} pts badge ${BADGE_EMOJIS[badgeIndex]}`);
+        }
+    });
+}
+
+
+async function updateUserNotifiedBadges(userId, notifiedBadges) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
+    const patchData = {
+        Id: userId,
+        notifiedBadges: notifiedBadges // Store as comma-separated string
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        },
+        body: JSON.stringify(patchData)
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to update user notified badges');
+    }
+
+    return await response.json();
+}
+
+
+function updateBadgesDisplay(badges) {
+    const badgesContainer = document.getElementById('badges-container');
+    const highestBadgeElement = document.getElementById('highest-badge');
+
+    if (badgesContainer && highestBadgeElement) {
+        badgesContainer.innerHTML = ''; // Clear existing badges
+        let highestBadge = 0;
+
+        badges.forEach(badge => {
+            const badgeIndex = BADGE_LEVELS.indexOf(badge);
+            if (badgeIndex !== -1) {
+                const badgeElement = document.createElement('span');
+                badgeElement.classList.add('badge');
+                badgeElement.textContent = BADGE_EMOJIS[badgeIndex];
+                badgesContainer.appendChild(badgeElement);
+                highestBadge = badge;
+            }
+        });
+
+        highestBadgeElement.textContent = highestBadge !== 0 
+            ? `Highest Badge: ${highestBadge} pts earned`
+            : 'No badges earned yet';
+    } else {
+        console.error('Badges container or highest badge element not found.');
+    }
+}
+
 function initializeModal() {
     const userImage = document.querySelector('.user-card img');
     const modal = document.getElementById('stats-modal');
-    const closeButton = document.querySelector('.close-button');
+    const closeButton = document.querySelector('.close-buton');
     const totalPointsElement = document.getElementById('total-points');
     const totalSkullsElement = document.getElementById('total-skulls');
 
-    if (userImage) {
         userImage.addEventListener('click', () => {
             totalPointsElement.textContent = `⭐ x${userDetails.Points || 0}`;
             totalSkullsElement.textContent = `💀 x${userDetails.Skull || 0}`;
+            updateBadgesDisplay(userDetails.Badges || []);
             modal.style.display = 'block';
         });
-    } else {
-        console.error('User image element not found.');
-    }
 
-    if (closeButton) {
         closeButton.addEventListener('click', () => {
+            console.log('Close button clicked');
             modal.style.display = 'none';
         });
-    } else {
-        console.error('Close button element not found.');
-    }
 
     window.addEventListener('click', (event) => {
         if (event.target === modal) {
             modal.style.display = 'none';
         }
     });
+}
+
+function showNotification(message) {
+    notificationQueue.push(message);
+    if (!isNotificationActive) {
+        displayNextNotification();
+    }
+}
+
+function displayNextNotification() {
+    if (notificationQueue.length === 0) {
+        isNotificationActive = false;
+        return;
+    }
+
+    isNotificationActive = true;
+    const notification = document.getElementById('notification');
+    notification.textContent = notificationQueue.shift();
+    notification.classList.add('show');
+
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(displayNextNotification, 500); // Wait for the fadeout animation to complete
+    }, 3000);
 }

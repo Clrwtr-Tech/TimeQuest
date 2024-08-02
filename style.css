@@ -398,7 +398,7 @@ body {
     border-radius: 8px;
 }
 
-.close-button {
+.close-buton {
     color: #aaa;
     float: right;
     font-size: 28px;
@@ -406,9 +406,48 @@ body {
     cursor: pointer;
 }
 
-.close-button:hover,
-.close-button:focus {
+.close-buton:hover,
+.close-buton:focus {
     color: #000;
     text-decoration: none;
     cursor: pointer;
+}
+
+#badges-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.badge {
+    font-size: 2em;
+}
+
+.notification {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #444;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 5px;
+    z-index: 1000;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.notification.show {
+    display: block;
+    animation: fadein 0.5s, fadeout 0.5s 2.5s;
+}
+
+@keyframes fadein {
+    from {bottom: 0; opacity: 0;}
+    to {bottom: 20px; opacity: 1;}
+}
+
+@keyframes fadeout {
+    from {bottom: 20px; opacity: 1;}
+    to {bottom: 0; opacity: 0;}
 }

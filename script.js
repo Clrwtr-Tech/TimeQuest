@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const loginContainer = document.getElementById('login-container');
     const prevArrow = document.getElementById('prev-arrow');
     const nextArrow = document.getElementById('next-arrow');
+    const loadingOverlay = document.getElementById('loading-overlay'); // Get the overlay element
 
     const loginData = JSON.parse(localStorage.getItem('loginData'));
 
@@ -103,7 +104,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (currentTime - loginTime < sevenDaysInMilliseconds) {
             username = loginData.username;
             loginContainer.style.display = 'none';
+            loadingOverlay.style.display = 'flex'; // Show loading overlay and spinner
             await initializeApp();
+            loadingOverlay.style.display = 'none'; // Hide loading overlay and spinner
         } else {
             localStorage.removeItem('loginData');
             loginContainer.style.display = 'block';
@@ -117,6 +120,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const enteredUsername = document.getElementById('username').value;
         const enteredPassword = document.getElementById('password').value;
 
+        loadingOverlay.style.display = 'flex'; // Show loading overlay and spinner
+
         // Authenticate user
         const isAuthenticated = await authenticateUser(enteredUsername, enteredPassword);
 
@@ -126,8 +131,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Initialize the app after successful login
             await initializeApp();
+            loadingOverlay.style.display = 'none'; // Hide loading overlay and spinner
         } else {
             alert('Invalid username or password');
+            loadingOverlay.style.display = 'none'; // Hide loading overlay and spinner
         }
     });
 
@@ -289,7 +296,17 @@ async function updateProjects(displayDate, userDetails) {
 function displayProjects(projects, container) {
     container.innerHTML = ''; // Clear any existing content
 
-    projects.forEach(project => {
+    if (!Array.isArray(projects)) {
+        console.error('Expected an array of projects, but received:', projects);
+        return;
+    }
+
+    projects.forEach((project, index) => {
+        if (!project || !project.Name) {
+            console.error(`Invalid project object at index ${index}:`, project);
+            return;
+        }
+
         const projectElement = document.createElement('div');
         projectElement.classList.add('project-card');
         projectElement.addEventListener('click', () => handleProjectClick(project));
@@ -307,35 +324,125 @@ function displayProjects(projects, container) {
     });
 }
 
-async function handleProjectClick(projectId) {
+
+
+async function handleProjectClick(project) {
     const tokenType = isToday(displayDate) ? 'Ontime' : 'Late';
     const timezoneOffset = displayDate.getTimezoneOffset() * 60000; // Offset in milliseconds
     const localDate = new Date(displayDate.getTime() - timezoneOffset);
     const startDateTime = localDate.toISOString().slice(0, 16).replace('T', ' ');
 
+    // Prepare the token data
     const tokenData = {
         Duration: HOURS_PER_TOKEN,
         start: startDateTime,
         nc_da8u___Users_id: userDetails.Id,
         TokenType: tokenType,
-        nc_da8u___Projects_id: projectId.Id
+        nc_da8u___Projects_id: project.Id
     };
 
-    await sendTokenData(tokenData);
+    // Save current token counts for revert if needed
+    const currentTokenCount = project.Tokens;
+    const currentPoints = userDetails.Points;
 
-    // Determine points based on token type
-    const points = tokenType === 'Ontime' ? 2 : 1; // Adjust multiplier as needed
+    // Show syncing message immediately
+    const totalHoursText = document.getElementById('total-hours');
+    totalHoursText.textContent = 'Syncing...';
 
-    // Update user points
-    userDetails.Points += points;
-    await updateUserPoints(userDetails.Id, userDetails.Points);
+    // Optimistically update the UI
+    updateUIOnProjectClick(project, tokenType);
 
-    // Update UI to reflect new points
-    updatePointsDisplay(userDetails.Points);
+    // Send the token data to the server
+    try {
+        await sendTokenData(tokenData);
 
+        // Update user points (Optimistically updated earlier)
+        const points = tokenType === 'Ontime' ? 2 : 1;
+        userDetails.Points += points;
+
+        // Persist the points update to the server
+        await updateUserPoints(userDetails.Id, userDetails.Points);
+    } catch (error) {
+        // Revert the UI changes in case of error
+        console.error('Failed to send token data:', error);
+        revertUIOnProjectClick(project, tokenType, currentTokenCount, currentPoints);
+        alert('Failed to update project. Please try again.');
+    }
+
+    // Update projects and token overview
     await updateProjects(displayDate, userDetails);
     await updateTokenOverview(displayDate, userDetails);
 }
+
+function updateUIOnProjectClick(project, tokenType) {
+    // Update the project token count optimistically
+    project.Tokens += 1;
+
+    // Get the projects array correctly
+    const projects = userDetails.nc_da8u___nc_m2m_syauur8821s
+        .map(link => link.Projects)
+        .filter(p => p); // Filter out any undefined projects
+
+    if (!Array.isArray(projects) || projects.length === 0) {
+        console.error('Expected a valid array of projects, but received:', projects);
+        return;
+    }
+
+    displayProjects(projects, document.getElementById('projects-container'));
+
+    // Update the token overview display optimistically
+    updateTokenDisplay(tokenType, true);
+
+    // Update points display optimistically
+    const points = tokenType === 'Ontime' ? 2 : 1;
+    updatePointsDisplay(userDetails.Points + points);
+}
+
+function revertUIOnProjectClick(project, tokenType, originalTokenCount, originalPoints) {
+    // Revert the project token count
+    project.Tokens = originalTokenCount;
+
+    // Get the projects array correctly
+    const projects = userDetails.nc_da8u___nc_m2m_syauur8821s
+        .map(link => link.Projects)
+        .filter(p => p); // Filter out any undefined projects
+
+    if (!Array.isArray(projects) || projects.length === 0) {
+        console.error('Expected a valid array of projects, but received:', projects);
+        return;
+    }
+
+    displayProjects(projects, document.getElementById('projects-container'));
+
+    // Revert the token overview display
+    updateTokenDisplay(tokenType, false);
+
+    // Revert points display
+    updatePointsDisplay(originalPoints);
+}
+
+
+function updateTokenDisplay(tokenType, isAdding) {
+    const tokenOverview = document.getElementById('token-overview');
+    const tokens = Array.from(tokenOverview.children);
+
+    if (isAdding) {
+        for (let i = 0; i < tokens.length; i++) {
+            if (tokens[i].textContent === '⚪') {
+                tokens[i].textContent = tokenType === 'Ontime' ? '🟡' : '🔵';
+                break;
+            }
+        }
+    } else {
+        for (let i = tokens.length - 1; i >= 0; i--) {
+            if (tokens[i].textContent === '🟡' || tokens[i].textContent === '🔵') {
+                tokens[i].textContent = '⚪';
+                break;
+            }
+        }
+    }
+}
+
 
 function isToday(someDate) {
     const today = new Date();
@@ -366,42 +473,50 @@ async function updateTokenOverview(displayDate, userDetails) {
     const tokenOverview = document.getElementById('token-overview');
     const totalHoursText = document.getElementById('total-hours');
 
+    // Show syncing message
+    totalHoursText.textContent = 'Syncing...';
+
     const currentDate = new Date();
     const daysAgo = Math.floor((currentDate - displayDate) / (1000 * 60 * 60 * 24));
 
-    const tokenCounts = await fetchDetailedTokenCountsByDate(userDetails.UserID, daysAgo);
-    //console.log('Token counts:', tokenCounts); // Log the token counts for debugging
-    
-    const ontimeCount = tokenCounts.Ontime || 0;
-    const lateCount = tokenCounts.Late || 0;
-    const ptoCount = tokenCounts.Pto || 0;
-    const totalUsedTokens = ontimeCount + lateCount + ptoCount;
-    const totalHoursTracked = totalUsedTokens * HOURS_PER_TOKEN;
+    try {
+        const tokenCounts = await fetchDetailedTokenCountsByDate(userDetails.UserID, daysAgo);
+        
+        const ontimeCount = tokenCounts.Ontime || 0;
+        const lateCount = tokenCounts.Late || 0;
+        const ptoCount = tokenCounts.Pto || 0;
+        const totalUsedTokens = ontimeCount + lateCount + ptoCount;
+        const totalHoursTracked = totalUsedTokens * HOURS_PER_TOKEN;
 
-    // Update token display
-    while (tokenOverview.children.length < TOKENS_PER_DAY) {
-        const tokenElement = document.createElement('span');
-        tokenElement.classList.add('token');
-        tokenOverview.appendChild(tokenElement);
-    }
-
-    for (let i = 0; i < TOKENS_PER_DAY; i++) {
-        const tokenElement = tokenOverview.children[i];
-
-        if (i < ontimeCount) {
-            tokenElement.textContent = '🟡';
-        } else if (i < ontimeCount + lateCount) {
-            tokenElement.textContent = '🔵';
-        } else if (i < ontimeCount + lateCount + ptoCount) {
-            tokenElement.textContent = '🟢';
-        } else {
-            tokenElement.textContent = '⚪';
+        // Update token display
+        while (tokenOverview.children.length < TOKENS_PER_DAY) {
+            const tokenElement = document.createElement('span');
+            tokenElement.classList.add('token');
+            tokenOverview.appendChild(tokenElement);
         }
-    }
 
-    // Update total hours text
-    totalHoursText.textContent = `Total hours tracked: ${totalHoursTracked.toFixed(1)} hours`;
+        for (let i = 0; i < TOKENS_PER_DAY; i++) {
+            const tokenElement = tokenOverview.children[i];
+
+            if (i < ontimeCount) {
+                tokenElement.textContent = '🟡';
+            } else if (i < ontimeCount + lateCount) {
+                tokenElement.textContent = '🔵';
+            } else if (i < ontimeCount + lateCount + ptoCount) {
+                tokenElement.textContent = '🟢';
+            } else {
+                tokenElement.textContent = '⚪';
+            }
+        }
+
+        // Update total hours text
+        totalHoursText.textContent = `Total hours tracked: ${totalHoursTracked.toFixed(1)} hours`;
+    } catch (error) {
+        console.error('Failed to update token overview:', error);
+        totalHoursText.textContent = 'Failed to sync';
+    }
 }
+
 
 async function updateUserPoints(userId, newPoints) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;

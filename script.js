@@ -324,8 +324,6 @@ function displayProjects(projects, container) {
     });
 }
 
-
-
 async function handleProjectClick(project) {
     const tokenType = isToday(displayDate) ? 'Ontime' : 'Late';
     const timezoneOffset = displayDate.getTimezoneOffset() * 60000; // Offset in milliseconds
@@ -421,7 +419,6 @@ function revertUIOnProjectClick(project, tokenType, originalTokenCount, original
     updatePointsDisplay(originalPoints);
 }
 
-
 function updateTokenDisplay(tokenType, isAdding) {
     const tokenOverview = document.getElementById('token-overview');
     const tokens = Array.from(tokenOverview.children);
@@ -442,7 +439,6 @@ function updateTokenDisplay(tokenType, isAdding) {
         }
     }
 }
-
 
 function isToday(someDate) {
     const today = new Date();

@@ -61,14 +61,16 @@ async function fetchDetailedTokenCountsByDate(userId, daysAgo) {
         console.error('Invalid data format:', data);
         return {
             Ontime: 0,
-            Late: 0
+            Late: 0,
+            Pto: 0
         };
     }
 
-    // Count Ontime and Late tokens
+    // Count Ontime, Late, and Pto tokens
     const tokenCounts = {
         Ontime: 0,
-        Late: 0
+        Late: 0,
+        Pto: 0
     };
 
     data.list.forEach(token => {
@@ -76,6 +78,8 @@ async function fetchDetailedTokenCountsByDate(userId, daysAgo) {
             tokenCounts.Ontime += 1;
         } else if (token.TokenType === 'Late') {
             tokenCounts.Late += 1;
+        } else if (token.TokenType === 'Pto') {
+            tokenCounts.Pto += 1;
         }
     });
 

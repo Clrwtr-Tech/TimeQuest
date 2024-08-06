@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+    <!-- Login Screen -->
     <div id="login-container" class="login-container">
         <h1>Time Quest</h1>
         <form id="login-form">
@@ -18,6 +20,7 @@
         </form>
     </div>
 
+<!-- Menu Bar -->
 <div id="menu-header" class="menu-header">
     <span id="menu-icon" class="menu-icon">≡</span>
     <span id="screen-title" class="screen-title">Quests</span>
@@ -26,8 +29,10 @@
     </div>
 </div>
 
+<!-- User Profile Bar -->
 <div id="user-container" class="user-card"></div>
 
+<!-- Calendar and Token UI -->
 <div id="date-container" class="date-card">
     <div id="date-navigation" class="date-navigation">
         <span id="prev-arrow" class="arrow">⬅️</span>
@@ -38,10 +43,13 @@
     <div id="total-hours" class="total-hours"></div>
 </div>
 
+<!-- Edit Mode Buttons -->
 <div id="undo-container" class="undo-container">
     <button id="undo-button" class="undo-button">Undo Token</button>
     <button id="new-project-button" class="new-project-button">New Project</button>
 </div>
+
+<!-- Projects Bar -->
 <div id="projects-container" class="projects-card"></div>
 
 <!-- New Project Modal -->
@@ -70,7 +78,39 @@
     </div>
 </div>
 
+<!-- Main Menu Modal -->
+<div id="main-menu-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-main-menu">&times;</span>
+        <h2>Main Menu</h2>
+        <button id="logout-button" class="menu-button">Logout</button>
+        <div class="app-info">
+            <p>TimeQuest v1.0</p>
+            <p>&copy; 2024 TimeQuest Inc.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Notifications -->
 <div id="notification" class="notification"></div>
+
+<!-- Sub Menu Bar -->
+<div class="submenu-container">
+    <div id="main-quests-button" class="submenu-button main-quests-button">Main Quests</div>
+    <div id="side-quests-button" class="submenu-button side-quests-button">Side Quests</div>
+</div>
+
+<!-- PTO Container -->
+<div id="pto-container" class="pto-container">
+    <div id="pto-left-display" class="pto-left-display"></div>
+    <div id="pto-tokens-left" class="pto-tokens-left"></div>
+    <div class="pto-card" onclick="handlePTOClick('hour')">
+        <h3>PTO ${HOURS_PER_TOKEN} hr</h3>
+    </div>
+    <div class="pto-card" onclick="handlePTOClick('full')">
+        <h3>PTO whole day</h3>
+    </div>
+</div>
 
     <script src="fetchData.js"></script>
     <script src="script.js"></script>

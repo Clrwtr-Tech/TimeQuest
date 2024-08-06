@@ -47,19 +47,28 @@ function updateDateDisplay() {
     const workweekArray = workweek.toLowerCase().split(',').map(day => dayMap[day.trim()]);
 
     // Check if the current day is a non-working day
-    if (workweekArray.includes(dayOfWeek)) {
-        dateContainer.classList.remove('non-working-day', 'today');
-        dateContainer.classList.add('working-day');
-    } else {
-        dateContainer.classList.remove('working-day', 'today');
-        dateContainer.classList.add('non-working-day');
-    }
+    const isNonWorkingDay = !workweekArray.includes(dayOfWeek);
 
-    // Check if the displayed date is today
-    if (isToday(displayDate)) {
-        dateContainer.classList.add('today');
+    // Check if the current date is today
+    const today = new Date();
+    const isToday = displayDate.toDateString() === today.toDateString();
+
+    // Check if the current date is a future date
+    const isFutureDate = displayDate > today;
+
+    // Apply appropriate class based on the checks
+    if (isNonWorkingDay) {
+        dateContainer.classList.remove('working-day', 'today', 'future-date');
+        dateContainer.classList.add('non-working-day');
+    } else if (isToday) {
+        dateContainer.classList.remove('non-working-day', 'future-date');
+        dateContainer.classList.add('working-day', 'today');
+    } else if (isFutureDate) {
+        dateContainer.classList.remove('non-working-day', 'today');
+        dateContainer.classList.add('working-day', 'future-date');
     } else {
-        dateContainer.classList.remove('today');
+        dateContainer.classList.remove('non-working-day', 'today', 'future-date');
+        dateContainer.classList.add('working-day');
     }
 }
 
@@ -78,12 +87,30 @@ function changeDate(days) {
 }
 
 // Event listener for DOMContentLoaded
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const loginForm = document.getElementById('login-form');
     const loginContainer = document.getElementById('login-container');
-    //const appContainer = document.getElementById('app-container');
     const prevArrow = document.getElementById('prev-arrow');
     const nextArrow = document.getElementById('next-arrow');
+
+    const loginData = JSON.parse(localStorage.getItem('loginData'));
+
+    if (loginData) {
+        const currentTime = new Date().getTime();
+        const loginTime = loginData.loginTime;
+        const sevenDaysInMilliseconds = 7 * 24 * 60 * 60 * 1000;
+
+        if (currentTime - loginTime < sevenDaysInMilliseconds) {
+            username = loginData.username;
+            loginContainer.style.display = 'none';
+            await initializeApp();
+        } else {
+            localStorage.removeItem('loginData');
+            loginContainer.style.display = 'block';
+        }
+    } else {
+        loginContainer.style.display = 'block';
+    }
 
     loginForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -166,7 +193,16 @@ async function authenticateUser(username, password) {
     const data = await response.json();
     const user = data.list[0];
 
-    return user && user.Password === password;
+    if (user && user.Password === password) {
+        const loginData = {
+            username: user.username,
+            loginTime: new Date().getTime()
+        };
+        localStorage.setItem('loginData', JSON.stringify(loginData));
+        return true;
+    }
+
+    return false;
 }
 
 function displayUserData(user, container) {
@@ -334,9 +370,12 @@ async function updateTokenOverview(displayDate, userDetails) {
     const daysAgo = Math.floor((currentDate - displayDate) / (1000 * 60 * 60 * 24));
 
     const tokenCounts = await fetchDetailedTokenCountsByDate(userDetails.UserID, daysAgo);
+    //console.log('Token counts:', tokenCounts); // Log the token counts for debugging
+    
     const ontimeCount = tokenCounts.Ontime || 0;
     const lateCount = tokenCounts.Late || 0;
-    const totalUsedTokens = ontimeCount + lateCount;
+    const ptoCount = tokenCounts.Pto || 0;
+    const totalUsedTokens = ontimeCount + lateCount + ptoCount;
     const totalHoursTracked = totalUsedTokens * HOURS_PER_TOKEN;
 
     // Update token display
@@ -353,6 +392,8 @@ async function updateTokenOverview(displayDate, userDetails) {
             tokenElement.textContent = '🟡';
         } else if (i < ontimeCount + lateCount) {
             tokenElement.textContent = '🔵';
+        } else if (i < ontimeCount + lateCount + ptoCount) {
+            tokenElement.textContent = '🟢';
         } else {
             tokenElement.textContent = '⚪';
         }
@@ -747,8 +788,6 @@ async function checkHeartsPenalty() {
     await updatePenaltyCheckDate(userDetails.Id, currentDate);
 }
 
-
-
 async function updateUserHearts(userId, newHearts) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
     const patchData = {
@@ -854,7 +893,6 @@ async function checkAndUpdateBadges() {
     });
 }
 
-
 async function updateUserNotifiedBadges(userId, notifiedBadges) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
     const patchData = {
@@ -877,7 +915,6 @@ async function updateUserNotifiedBadges(userId, notifiedBadges) {
 
     return await response.json();
 }
-
 
 function updateBadgesDisplay(badges) {
     const badgesContainer = document.getElementById('badges-container');
@@ -955,3 +992,179 @@ function displayNextNotification() {
         setTimeout(displayNextNotification, 500); // Wait for the fadeout animation to complete
     }, 3000);
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const menuIcon = document.getElementById('menu-icon');
+    const mainMenuModal = document.getElementById('main-menu-modal');
+    const closeMainMenu = document.querySelector('.close-main-menu');
+    const logoutButton = document.getElementById('logout-button');
+
+    menuIcon.addEventListener('click', () => {
+        mainMenuModal.style.display = 'block';
+    });
+
+    closeMainMenu.addEventListener('click', () => {
+        mainMenuModal.style.display = 'none';
+    });
+
+    window.addEventListener('click', (event) => {
+        if (event.target === mainMenuModal) {
+            mainMenuModal.style.display = 'none';
+        }
+    });
+
+    logoutButton.addEventListener('click', () => {
+        localStorage.removeItem('loginData'); // Remove login data from local storage
+        location.reload(); // Reload the page to show the login screen
+    });
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const mainQuestsButton = document.getElementById('main-quests-button');
+    const sideQuestsButton = document.getElementById('side-quests-button');
+    const projectsContainer = document.getElementById('projects-container');
+    const ptoContainer = document.getElementById('pto-container');
+    const ptoLeftDisplay = document.getElementById('pto-left-display');
+    const ptoTokensLeft = document.getElementById('pto-tokens-left'); // New element for displaying the number of tokens
+    const ptoOneHourButton = document.querySelector('.pto-one-hour');
+
+    // Update PTO card labels
+    document.querySelector('.pto-card:nth-child(3) h3').textContent = `PTO ${HOURS_PER_TOKEN} hr`;
+
+    // Initially set the Main Quests button as active
+    mainQuestsButton.classList.add('active');
+    projectsContainer.style.display = 'block'; // Ensure projects are displayed initially
+    ptoContainer.style.display = 'none';
+
+    mainQuestsButton.addEventListener('click', () => {
+        projectsContainer.style.display = 'block'; // Changed to 'block'
+        ptoContainer.style.display = 'none';
+        mainQuestsButton.classList.add('active');
+        sideQuestsButton.classList.remove('active');
+    });
+
+    sideQuestsButton.addEventListener('click', () => {
+        projectsContainer.style.display = 'none';
+        ptoContainer.style.display = 'block'; // Changed to 'block'
+        updatePTOLeftDisplay();
+        sideQuestsButton.classList.add('active');
+        mainQuestsButton.classList.remove('active');
+    });
+
+    async function handlePTOClick(hours) {
+        const ptoLeft = userDetails.PTOleft;
+        const currentTokenCounts = await fetchDetailedTokenCountsByDate(userDetails.UserID, getDaysAgo(displayDate));
+        const currentTokensUsed = currentTokenCounts.Ontime + currentTokenCounts.Late + currentTokenCounts.Pto;
+        const remainingTokens = TOKENS_PER_DAY - currentTokensUsed;
+        let tokensToAdd = 0;
+
+        if (remainingTokens <= 0) {
+            alert('All tokens are spent for this date.');
+            return;
+        }
+
+        if (hours === 'full') {
+            tokensToAdd = Math.min(ptoLeft, remainingTokens);
+        } else {
+            tokensToAdd = Math.min(ptoLeft, HOURS_PER_TOKEN, remainingTokens);
+        }
+
+        if (tokensToAdd > 0) {
+            const tokenCount = hours === 'full' ? tokensToAdd : 1;
+            const totalTokensAdded = tokenCount;
+
+            for (let i = 0; i < tokenCount; i++) {
+                const tokenData = {
+                    Duration: HOURS_PER_TOKEN,
+                    start: displayDate.toISOString().slice(0, 10) + ' 00:00', // Assuming start time is 00:00
+                    nc_da8u___Users_id: userDetails.Id,
+                    TokenType: 'Pto',
+                    nc_da8u___Projects_id: null // No specific project ID for PTO
+                };
+
+                await sendTokenData(tokenData);
+            }
+
+            userDetails.PTOleft -= tokensToAdd;
+            await updateUserPTOleft(userDetails.Id, userDetails.PTOleft);
+
+            // Update user points (2 points per PTO token used)
+            userDetails.Points += totalTokensAdded * 2;
+            await updateUserPoints(userDetails.Id, userDetails.Points);
+
+            updatePointsDisplay(userDetails.Points);
+            await updateTokenOverview(displayDate, userDetails);
+            updatePTOLeftDisplay();
+        } else {
+            alert('No more PTO tokens available.');
+        }
+    }
+
+    async function updatePTOLeftDisplay() {
+        ptoLeftDisplay.textContent = `PTO left: ${userDetails.PTOleft}hrs`;
+        const tokensLeft = Math.floor(userDetails.PTOleft / HOURS_PER_TOKEN);
+        ptoTokensLeft.textContent = `Tokens left: ${tokensLeft} 🟢`;
+    }
+
+    async function updateUserPTOleft(userId, newPTOleft) {
+        const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
+        const patchData = {
+            Id: userId,
+            PTOleft: newPTOleft
+        };
+
+        // Log the payload to debug
+        console.log('Patch Data:', patchData);
+
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'xc-token': token
+            },
+            body: JSON.stringify(patchData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Failed to update user PTOleft:', errorData);
+            throw new Error('Failed to update user PTOleft');
+        }
+
+        return await response.json();
+    }
+
+    async function updateUserPoints(userId, newPoints) {
+        const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
+        const patchData = {
+            Id: userId,
+            Points: newPoints
+        };
+
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'xc-token': token
+            },
+            body: JSON.stringify(patchData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Failed to update user points:', errorData);
+            throw new Error('Failed to update user points');
+        }
+
+        return await response.json();
+    }
+
+    function getDaysAgo(date) {
+        const currentDate = new Date();
+        return Math.floor((currentDate - date) / (1000 * 60 * 60 * 24));
+    }
+
+    // Expose handlePTOClick and updatePTOLeftDisplay to the global scope
+    window.handlePTOClick = handlePTOClick;
+    window.updatePTOLeftDisplay = updatePTOLeftDisplay;
+});

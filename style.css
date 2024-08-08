@@ -339,7 +339,7 @@ body {
     align-items: center;
 }
 
-#login-form label, #login-form input {
+#login-form input {
     width: 100%;
     max-width: 300px;
     margin-bottom: 15px;
@@ -358,10 +358,71 @@ body {
     border: none;
     border-radius: 5px;
     cursor: pointer;
+    max-width: 300px;
+    width: 100%;
 }
 
 #login-form button:hover {
     background-color: #0271e9;
+}
+
+#login-form label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 14px;
+    margin: 0 0 10px 0;
+    height: 30px;
+    width: 100%;
+    max-width: 300px;
+    margin-bottom: 15px;
+}
+
+#login-form input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    position: relative;
+    cursor: pointer;
+    margin: 3px;
+}
+
+#login-form input[type="checkbox"]::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    background-color: transparent;
+    transform: translate(-50%, -50%);
+    border-radius: 2px;
+    transition: background-color 0.3s;
+}
+
+#login-form input[type="checkbox"]::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 6px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+#login-form input[type="checkbox"]:checked::before {
+    background-color: #007bff; /* Background color when checked */
+}
+
+#login-form input[type="checkbox"]:checked::after {
+    opacity: 1; /* Show the checkmark */
 }
 
 .non-working-day {

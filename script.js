@@ -90,9 +90,9 @@ function changeDate(days) {
 document.addEventListener('DOMContentLoaded', async () => {
     const loginForm = document.getElementById('login-form');
     const loginContainer = document.getElementById('login-container');
+    const loadingOverlay = document.getElementById('loading-overlay');
     const prevArrow = document.getElementById('prev-arrow');
     const nextArrow = document.getElementById('next-arrow');
-    const loadingOverlay = document.getElementById('loading-overlay'); // Get the overlay element
 
     const loginData = JSON.parse(localStorage.getItem('loginData'));
 
@@ -104,9 +104,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (currentTime - loginTime < sevenDaysInMilliseconds) {
             username = loginData.username;
             loginContainer.style.display = 'none';
-            loadingOverlay.style.display = 'flex'; // Show loading overlay and spinner
+            loadingOverlay.style.display = 'flex'; // Show the loading overlay
             await initializeApp();
-            loadingOverlay.style.display = 'none'; // Hide loading overlay and spinner
+            loadingOverlay.style.display = 'none'; // Hide the loading overlay
         } else {
             localStorage.removeItem('loginData');
             loginContainer.style.display = 'block';
@@ -119,8 +119,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         event.preventDefault();
         const enteredUsername = document.getElementById('username').value;
         const enteredPassword = document.getElementById('password').value;
+        const rememberMe = document.getElementById('remember-me').checked;
 
-        loadingOverlay.style.display = 'flex'; // Show loading overlay and spinner
+        // Show the loading overlay when starting the login process
+        loadingOverlay.style.display = 'flex';
 
         // Authenticate user
         const isAuthenticated = await authenticateUser(enteredUsername, enteredPassword);
@@ -129,13 +131,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             username = enteredUsername; // Commit the username
             loginContainer.style.display = 'none';
 
+            if (rememberMe) {
+                const loginData = {
+                    username: enteredUsername,
+                    loginTime: new Date().getTime()
+                };
+                localStorage.setItem('loginData', JSON.stringify(loginData));
+            } else {
+                localStorage.removeItem('loginData'); // Clear existing login data if not remembered
+            }
+
             // Initialize the app after successful login
             await initializeApp();
-            loadingOverlay.style.display = 'none'; // Hide loading overlay and spinner
         } else {
             alert('Invalid username or password');
-            loadingOverlay.style.display = 'none'; // Hide loading overlay and spinner
         }
+
+        // Hide the loading overlay after login process is done
+        loadingOverlay.style.display = 'none';
     });
 
     prevArrow.addEventListener('click', () => changeDate(-1));

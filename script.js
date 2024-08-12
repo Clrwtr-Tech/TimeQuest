@@ -90,9 +90,16 @@ function changeDate(days) {
 document.addEventListener('DOMContentLoaded', async () => {
     const loginForm = document.getElementById('login-form');
     const loginContainer = document.getElementById('login-container');
+    const forgotPasswordLink = document.getElementById('forgot-password');
+    const forgotPasswordModal = document.getElementById('forgot-password-modal');
+    const closeModalButton = document.querySelector('.close-button');
+    const sendResetLinkButton = document.getElementById('send-reset-link');
+    const resetPasswordContainer = document.getElementById('reset-password-container');
+    const resetPasswordForm = document.getElementById('reset-password-form');
     const loadingOverlay = document.getElementById('loading-overlay');
     const prevArrow = document.getElementById('prev-arrow');
     const nextArrow = document.getElementById('next-arrow');
+
 
     const loginData = JSON.parse(localStorage.getItem('loginData'));
 
@@ -151,9 +158,58 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadingOverlay.style.display = 'none';
     });
 
+    forgotPasswordLink.addEventListener('click', () => {
+        forgotPasswordModal.style.display = 'flex';
+    });
+
+    closeModalButton.addEventListener('click', () => {
+        forgotPasswordModal.style.display = 'none';
+    });
+
+    sendResetLinkButton.addEventListener('click', async () => {
+        const email = document.getElementById('reset-email').value;
+
+        if (email) {
+            const user = await findUserByEmail(email);
+            if (user) {
+                await sendResetEmail(user.username, email);
+                alert('A reset link has been sent to your email.');
+                forgotPasswordModal.style.display = 'none';
+            } else {
+                alert('Email not found.');
+            }
+        }
+    });
+
+    resetPasswordForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const newPassword = document.getElementById('new-password').value;
+        const confirmPassword = document.getElementById('confirm-password').value;
+
+        if (newPassword !== confirmPassword) {
+            alert('Passwords do not match.');
+            return;
+        }
+
+        const userId = localStorage.getItem('resetUserId');
+        if (userId) {
+            await updatePassword(userId, newPassword);
+            alert('Password has been reset successfully.');
+            resetPasswordContainer.style.display = 'none';
+            loginContainer.style.display = 'block';
+        } else {
+            alert('Failed to reset password.');
+        }
+    });
+
     prevArrow.addEventListener('click', () => changeDate(-1));
     nextArrow.addEventListener('click', () => changeDate(1));
 });
+
+async function fetchAndUpdateUserDetails(userId) {
+    const userDetails = await fetchUserById(userId);
+    return userDetails;
+}
 
 async function initializeApp() {
     const userContainer = document.getElementById('user-container');
@@ -186,11 +242,32 @@ async function initializeApp() {
 
             // Initialize modal functionality
             initializeModal();
+
+            // Check if it's time to update Clockify projects
+             await checkClockifyUpdate();
+
         } else {
             userContainer.textContent = 'User not found';
         }
     } else {
         userContainer.textContent = 'No username entered';
+    }
+}
+
+async function checkClockifyUpdate() {
+    const lastCheckDate = localStorage.getItem('lastClockifyCheck');
+    const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
+
+    if (lastCheckDate !== today && userDetails.ClockifyApiKey) {
+        // Perform the Clockify project check
+        await fetchAndUpdateClockifyProjects(
+            userDetails.ClockifyApiKey, 
+            userDetails.ClockifyUserId, 
+            userDetails.ClockifyWorkspaceId
+        );
+
+        // Update the last check date in localStorage
+        localStorage.setItem('lastClockifyCheck', today);
     }
 }
 
@@ -283,7 +360,6 @@ function displayUserData(user, container) {
 
 async function updateProjects(displayDate, userDetails) {
     const projectsContainer = document.getElementById('projects-container');
-    //console.log('Project ID:', userDetails.nc_da8u___nc_m2m_syauur8821s); // Log the ProjectID
 
     const projects = userDetails.nc_da8u___nc_m2m_syauur8821s
         .filter(link => link.Projects && !link.Projects.Archived)
@@ -294,7 +370,6 @@ async function updateProjects(displayDate, userDetails) {
 
     // Fetch token counts and update the project cards
     for (const project of projects) {
-        
         if (project.ProjectID) {
             const tokenCountData = await fetchTokenCounts(project.ProjectID, userDetails.UserID, daysAgo);
             project.Tokens = tokenCountData.count;
@@ -306,7 +381,9 @@ async function updateProjects(displayDate, userDetails) {
     displayProjects(projects, projectsContainer);
 }
 
-function displayProjects(projects, container) {
+function displayProjects(projects, container, editMode = false) {
+    console.log('Displaying projects:', projects); // Log the projects array
+
     container.innerHTML = ''; // Clear any existing content
 
     if (!Array.isArray(projects)) {
@@ -317,12 +394,31 @@ function displayProjects(projects, container) {
     projects.forEach((project, index) => {
         if (!project || !project.Name) {
             console.error(`Invalid project object at index ${index}:`, project);
-            return;
+            return; // Skip this project if it is undefined or has no name
         }
+        //console.log(`Rendering project at index ${index}:`, project); // Log each project being rendered
 
         const projectElement = document.createElement('div');
         projectElement.classList.add('project-card');
-        projectElement.addEventListener('click', () => handleProjectClick(project));
+
+           // Apply light blue background for Clockify-linked projects
+           if (project.ClockifyProject) {
+            projectElement.style.backgroundColor = '#DCEEFB'; // Light blue background
+        }
+        
+        // If in edit mode and the project is removable, apply remove-mode class
+        if (editMode) {
+            if (project.Removal) {
+                projectElement.classList.add('remove-mode');
+                projectElement.addEventListener('click', () => handleProjectRemoval(project));
+            } else {
+                // If the project is not removable, make it unclickable and not red
+                projectElement.style.opacity = '0.5'; // Dim the card to show it's disabled
+                projectElement.style.pointerEvents = 'none'; // Make it unclickable
+            }
+        } else {
+            projectElement.addEventListener('click', () => handleProjectClick(project));
+        }
 
         const projectName = document.createElement('h3');
         projectName.textContent = project.Name;
@@ -363,16 +459,38 @@ async function handleProjectClick(project) {
     // Optimistically update the UI
     updateUIOnProjectClick(project, tokenType);
 
+     // Check if the project is a Clockify project and send the time entry
+     if (project.ClockifyProject) {
+        try {
+            const durationHours = HOURS_PER_TOKEN; // Assuming you want to track this duration
+            await sendClockifyTimeEntry(project.ProjectID, durationHours);
+        } catch (error) {
+            console.error('Error sending Clockify time entry:', error);
+            // Optionally, revert the optimistic update if the Clockify entry fails
+            // rollbackUIOnProjectClick(project);
+        }
+    }
+    
     // Send the token data to the server
     try {
+        // Send token data to the database
         await sendTokenData(tokenData);
 
-        // Update user points (Optimistically updated earlier)
-        const points = tokenType === 'Ontime' ? 2 : 1;
-        userDetails.Points += points;
+        // Determine points based on token type
+        const points = tokenType === 'Ontime' ? 2 : 1; // Adjust multiplier as needed
 
-        // Persist the points update to the server
+        // Update user points
+        userDetails.Points += points;
         await updateUserPoints(userDetails.Id, userDetails.Points);
+
+        // Update UI to reflect new points
+        updatePointsDisplay(userDetails.Points);
+
+        // Check if the project is a Clockify project
+        if (project.ClockifyProject) {
+            const durationHours = 0.5; // Assuming each entry is for 0.5 hours
+            sendClockifyTimeEntry(project.ProjectID, durationHours);
+        }
     } catch (error) {
         // Revert the UI changes in case of error
         console.error('Failed to send token data:', error);
@@ -430,6 +548,52 @@ function revertUIOnProjectClick(project, tokenType, originalTokenCount, original
 
     // Revert points display
     updatePointsDisplay(originalPoints);
+}
+
+async function sendClockifyTimeEntry(clockifyProjectId, durationHours) {
+    // Log to verify the function's inputs
+    console.log('Function Inputs - Clockify Project ID:', clockifyProjectId, 'Duration Hours:', durationHours);
+
+    if (!clockifyProjectId) {
+        console.error('No Clockify Project ID provided');
+        return;
+    }
+
+    const startTime = new Date().toISOString(); // Current time in ISO 8601 format
+    const durationInMilliseconds = durationHours * 3600 * 1000; // Convert duration from hours to milliseconds
+
+    // Calculate end time by adding duration to start time
+    const endTime = new Date(new Date().getTime() + durationInMilliseconds).toISOString();
+
+    const timeEntryData = {
+        start: startTime,
+        end: endTime, // Explicitly set the end time
+        billable: true,
+        description: `Time entry for project ${clockifyProjectId}`,
+        projectId: clockifyProjectId
+    };
+
+    console.log('Time Entry Data:', timeEntryData);
+
+    try {
+        const response = await fetch(`https://api.clockify.me/api/v1/workspaces/${userDetails.ClockifyWorkspaceId}/time-entries`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Api-Key': userDetails.ClockifyApiKey
+            },
+            body: JSON.stringify(timeEntryData)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to send time entry to Clockify');
+        }
+
+        const data = await response.json();
+        console.log('Clockify time entry created:', data);
+    } catch (error) {
+        console.error('Error creating Clockify time entry:', error);
+    }
 }
 
 function updateTokenDisplay(tokenType, isAdding) {
@@ -526,7 +690,6 @@ async function updateTokenOverview(displayDate, userDetails) {
     }
 }
 
-
 async function updateUserPoints(userId, newPoints) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
     const patchData = {
@@ -562,6 +725,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const undoContainer = document.getElementById('undo-container');
     const undoButton = document.getElementById('undo-button');
     const newProjectButton = document.getElementById('new-project-button');
+    const removeProjectButton = document.getElementById('remove-project-button');
     const newProjectModal = document.getElementById('new-project-modal');
     const closeModalButton = document.querySelector('.close-button');
     const newProjectForm = document.getElementById('new-project-form');
@@ -599,12 +763,19 @@ document.addEventListener('DOMContentLoaded', () => {
         await createNewProject(projectName);
         newProjectModal.style.display = 'none';
     });
+    
+    removeProjectButton.addEventListener('click', () => {
+        const isEditing = removeProjectButton.classList.toggle('active');
+        const projects = userDetails.nc_da8u___nc_m2m_syauur8821s
+            .filter(link => link.Projects && !link.Projects.Archived)
+            .map(link => link.Projects);
+        displayProjects(projects, document.getElementById('projects-container'), isEditing);
+    });
 });
 
 function toggleEditMode() {
     const isEditing = document.getElementById('edit-button').classList.contains('active');
     const projectCards = document.querySelectorAll('.project-card');
-    const undoContainer = document.getElementById('undo-container');
 
     projectCards.forEach(card => {
         if (isEditing) {
@@ -614,10 +785,8 @@ function toggleEditMode() {
         }
     });
 
-    // Toggle the visibility of the undo container based on edit mode
+    const undoContainer = document.getElementById('undo-container');
     undoContainer.style.display = isEditing ? 'flex' : 'none';
-
-    //console.log(`Edit mode is ${isEditing ? 'enabled' : 'disabled'}`);
 }
 
 async function removeLastToken(userId) {
@@ -735,39 +904,6 @@ async function fetchWorkspaceId() {
 function generateProjectID(name) {
     // Generate a simple ProjectID based on the project name, truncated and sanitized
     return name.replace(/\s+/g, '').substring(0, 6).toUpperCase();
-}
-//Duplicate createNewProject function Figure out which one is the right one!
-async function createNewProject(projectName) {
-    const workspaceId = await fetchWorkspaceId();
-    const projectId = generateProjectID(projectName);
-
-    const projectData = {
-        Name: projectName,
-        ProjectID: projectId,
-        Archived: false,
-        nc_da8u___Workspace_id: workspaceId
-    };
-
-    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/records`;
-
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'xc-token': token
-        },
-        body: JSON.stringify(projectData)
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to create new project');
-    }
-
-    const newProject = await response.json();
-    //console.log('New project created:', newProject);
-
-    // Link the new project with the current user
-    await linkUserToProject(userDetails.Id, newProject.Id);
 }
 
 async function createNewProject(projectName) {
@@ -1292,3 +1428,362 @@ document.addEventListener('DOMContentLoaded', () => {
     window.handlePTOClick = handlePTOClick;
     window.updatePTOLeftDisplay = updatePTOLeftDisplay;
 });
+
+async function findUserByEmail(email) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records?where=(email,eq,${email})`;
+    const response = await fetch(url, {
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        }
+    });
+    const data = await response.json();
+    return data.list[0]; // Assuming the email is unique and returns one user
+}
+
+async function sendResetEmail(username, email) {
+    const resetLink = `https://yourwebsite.com/reset-password?user=${username}`;
+    // Here you would typically send the email through your backend
+    console.log(`Email sent to ${email} with reset link: ${resetLink}`);
+    // Example: Use a backend API to send an email
+}
+
+async function updatePassword(userId, newPassword) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
+    const patchData = {
+        Id: userId,
+        Password: newPassword
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        },
+        body: JSON.stringify(patchData)
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to update password');
+    }
+    localStorage.removeItem('resetUserId');
+}
+
+async function handleProjectRemoval(project) {
+    const confirmed = confirm(`Are you sure you want to remove the project "${project.Name}"?`);
+
+    if (!confirmed) return;
+
+    const userId = userDetails.Id;
+    const projectId = project.Id;
+
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/links/c9d1etbtwagiemf/records/${projectId}`;
+
+    const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        },
+        body: JSON.stringify({ Id: userId }) // Send the user's ID to remove the link
+    });
+
+    if (response.ok) {
+        alert(`Project "${project.Name}" has been removed.`);
+        // Re-fetch the user details to update the project list
+        userDetails = await refetchUserDetails(userId);
+        await updateProjects(displayDate, userDetails);
+    } else {
+        alert(`Failed to remove the project "${project.Name}".`);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const clockifyButton = document.getElementById('clockify-button');
+    const clockifyModal = document.getElementById('clockify-modal');
+    const closeModalButton = clockifyModal.querySelector('.close-button');
+    const saveClockifyKeyButton = document.getElementById('save-clockify-key');
+
+    clockifyButton.addEventListener('click', () => {
+        clockifyModal.style.display = 'block';
+    });
+
+    closeModalButton.addEventListener('click', () => {
+        clockifyModal.style.display = 'none';
+    });
+
+    saveClockifyKeyButton.addEventListener('click', async () => {
+        const apiKey = document.getElementById('clockify-api-key').value;
+        if (!apiKey) {
+            alert('Please enter a valid Clockify API key.');
+            return;
+        }
+
+        // Save API key and fetch Clockify user data
+        await fetchClockifyUserData(apiKey);
+        clockifyModal.style.display = 'none';
+    });
+
+    async function fetchClockifyUserData(apiKey) {
+        try {
+            const response = await fetch('https://api.clockify.me/api/v1/user', {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Api-Key': apiKey
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch Clockify user data');
+            }
+
+            const userData = await response.json();
+            const userId = userData.id;
+            const defaultWorkspaceId = userData.defaultWorkspace;
+
+            // Update the user's table with the Clockify data
+            await updateUserWithClockifyData(userDetails.Id, apiKey, userId, defaultWorkspaceId);
+
+            // Fetch and update projects from Clockify
+            await fetchAndUpdateClockifyProjects(apiKey, userId, defaultWorkspaceId);
+
+        } catch (error) {
+            console.error('Error fetching Clockify user data:', error);
+        }
+    }
+
+    async function updateUserWithClockifyData(userId, apiKey, clockifyUserId, defaultWorkspaceId) {
+        const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
+        const patchData = {
+            Id: userId,
+            ClockifyApiKey: apiKey,
+            ClockifyUserId: clockifyUserId,
+            ClockifyWorkspaceId: defaultWorkspaceId
+        };
+
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'xc-token': token
+            },
+            body: JSON.stringify(patchData)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update user with Clockify data');
+        }
+
+        return await response.json();
+    }
+
+   
+
+/*      async function fetchExistingProjectByClockifyId(clockifyProjectId) {
+        const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/records?where=(ProjectID,eq,${clockifyProjectId})`;
+    
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'xc-token': token
+            }
+        });
+    
+        if (!response.ok) {
+            throw new Error('Failed to fetch existing projects');
+        }
+    
+        const data = await response.json();
+        return data.list.length > 0 ? data.list[0] : null;
+    } */
+
+
+    
+});
+
+async function fetchAndUpdateClockifyProjects(apiKey, clockifyUserId, workspaceId) {
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const clockifyModal = document.getElementById('clockify-modal');
+    const mainMenuModal = document.getElementById('main-menu-modal');
+
+    try {
+        // Show the loading overlay and close the Clockify modal
+        loadingOverlay.style.display = 'flex';
+        clockifyModal.style.display = 'none';
+        mainMenuModal.style.display = 'none';
+
+
+        const url = `https://api.clockify.me/api/v1/workspaces/${workspaceId}/projects`;
+        const response = await fetch(url, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Api-Key': apiKey
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch Clockify projects');
+        }
+
+        const projects = await response.json();
+        const userSystemId = userDetails.Id; // Use the system user ID
+
+        for (const project of projects) {
+            if (!project.archived) { // Filter out archived projects
+                const existingProject = await checkIfProjectExists(project.id);
+
+                if (existingProject) {
+                    console.log(`Project ${project.name} already exists. Checking user linkage...`);
+                    const isUserLinked = await checkIfUserIsLinked(existingProject.Id, userSystemId);
+                    if (!isUserLinked) {
+                        await linkUserToProject(userSystemId, existingProject.Id); // Link the user to the existing project
+                    }
+                } else {
+                    await addClockifyProjectToDatabase(project, userSystemId, workspaceId);
+                }
+            }
+        }
+
+        // Re-fetch user details to ensure the linked projects are included
+        userDetails = await refetchUserDetails(userSystemId);
+
+        // Update the projects container to display the newly linked projects
+        await updateProjects(displayDate, userDetails);
+
+    } catch (error) {
+        console.error('Error fetching Clockify projects:', error);
+    } finally {
+        // Hide the loading overlay
+        loadingOverlay.style.display = 'none';
+    }
+}
+
+async function checkIfProjectExists(projectId) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/records?where=(ProjectID,eq,${projectId})`;
+
+    const response = await fetch(url, {
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to check if project exists');
+    }
+
+    const data = await response.json();
+    return data.list.length > 0 ? data.list[0] : null; // Return the project if it exists, else null
+}
+
+async function addClockifyProjectToDatabase(project, userId, workspaceId) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/records`;
+
+    const projectData = {
+        Name: project.name,
+        ProjectID: project.id,  // This is the external Clockify ID
+        Archived: project.archived,
+        ClockifyProject: true,
+        Removal: false // Set Removal to false for Clockify imported projects
+    };
+
+    // First, create the project record
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        },
+        body: JSON.stringify(projectData)
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to add Clockify project to database');
+    }
+
+    const newProject = await response.json();
+
+    // Use the system ID for linking
+    const userSystemId = userDetails.Id; // Fetch the system ID for the user
+    const workspaceSystemId = userDetails.nc_da8u___Workspace_id; // Fetch the system ID for the workspace
+
+    // Link the project to the user using the system ID
+    await linkUserToProject(userSystemId, newProject.Id);
+
+    // Link the project to the workspace using the system ID
+    await linkWorkspaceToProject(workspaceSystemId, newProject.Id);
+    
+    return newProject;
+}
+
+async function checkIfUserIsLinked(projectId, userId) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/links/c9d1etbtwagiemf/records/${projectId}?where=(Id,eq,${userId})`;
+
+    const response = await fetch(url, {
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to check if user is linked to project');
+    }
+
+    const data = await response.json();
+    return data.list.length > 0; // Return true if the user is already linked, otherwise false
+}
+
+async function linkUserToProject(userId, projectId) {
+    console.log(`Linking userId: ${userId} to projectId: ${projectId}`); // Log the userId and projectId
+
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/links/c9d1etbtwagiemf/records/${projectId}`;
+
+    const linkData = {
+        Id: userId  // Correctly using the system ID for the user
+    };
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        },
+        body: JSON.stringify(linkData)
+    });
+
+    if (!response.ok) {
+        console.error('Failed to link user to project:', await response.text());
+        throw new Error('Failed to link user to project');
+    }
+
+    return await response.json();
+}
+
+async function linkWorkspaceToProject(workspaceId, projectId) {
+    console.log(`Linking workspaceId: ${workspaceId} to projectId: ${projectId}`); // Log the workspaceId and projectId
+
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/links/c02dhr63el6er6y/records/${projectId}`;
+
+    const linkData = {
+        Id: workspaceId  // Correctly using the system ID for the workspace
+    };
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        },
+        body: JSON.stringify(linkData)
+    });
+
+    if (!response.ok) {
+        console.error('Failed to link workspace to project:', await response.text());
+        throw new Error('Failed to link workspace to project');
+    }
+
+    return await response.json();
+}

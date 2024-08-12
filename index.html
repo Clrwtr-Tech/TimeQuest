@@ -5,22 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Time Quest</title>
     <link rel="stylesheet" href="style.css">
-
     <link rel="icon" href="TQLogo.png" type="image/png">
     <!-- Apple Touch Icon -->
     <link rel="apple-touch-icon" sizes="180x180" href="assets/TQLogo-180x180.png">
-    
     <!-- Android Icon -->
     <link rel="icon" sizes="192x192" href="assets/TQLogo-192x192.png">
-        
-
 </head>
 <body>
-
     <div id="loading-overlay" class="loading-overlay">
         <div id="loading-text" class="loading-text">Your Quest Awaits<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></div>
     </div>
-
     <!-- Login Screen -->
     <div id="login-container" class="login-container">
         <h1>Time Quest</h1>
@@ -31,6 +25,26 @@
                 <input type="checkbox" id="remember-me"> Remember me
             </label>
             <button type="submit">Login</button>
+            <a href="#" id="forgot-password">Forgot Password?</a>
+        </form>
+    </div>
+
+    <div id="forgot-password-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2>Reset Password</h2>
+            <p>Please enter your email address to reset your password:</p>
+            <input type="email" id="reset-email" placeholder="Enter your email" required>
+            <button id="send-reset-link">Send Reset Link</button>
+        </div>
+    </div>
+
+    <div id="reset-password-container" class="hidden">
+        <h2>Reset Your Password</h2>
+        <form id="reset-password-form">
+            <input type="password" id="new-password" placeholder="New Password" required>
+            <input type="password" id="confirm-password" placeholder="Confirm Password" required>
+            <button type="submit">Submit</button>
         </form>
     </div>
 
@@ -60,6 +74,7 @@
 <!-- Edit Mode Buttons -->
 <div id="undo-container" class="undo-container">
     <button id="undo-button" class="undo-button">Undo Token</button>
+    <button id="remove-project-button">Remove Project</button>
     <button id="new-project-button" class="new-project-button">New Project</button>
 </div>
 
@@ -97,6 +112,7 @@
     <div class="modal-content">
         <span class="close-main-menu">&times;</span>
         <h2>Main Menu</h2>
+        <button id="clockify-button">Connect Clockify</button>
         <button id="logout-button" class="menu-button">Logout</button>
         <div class="app-info">
             <p>TimeQuest v1.0</p>
@@ -123,6 +139,15 @@
     </div>
     <div class="pto-card" onclick="handlePTOClick('full')">
         <h3>PTO whole day</h3>
+    </div>
+</div>
+
+<div id="clockify-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2>Enter Clockify API Key</h2>
+        <input type="text" id="clockify-api-key" placeholder="Enter your API key">
+        <button id="save-clockify-key">Save API Key</button>
     </div>
 </div>
 

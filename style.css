@@ -255,7 +255,7 @@ body {
     padding-top: 60px;
 }
 
-.modal-content {
+ .modal-content {
     background-color: #fefefe;
     margin: 5% auto;
     padding: 20px;
@@ -263,7 +263,7 @@ body {
     width: 80%;
     max-width: 500px;
     border-radius: 10px;
-}
+} 
 
 .close-button {
     color: #aaa;
@@ -539,6 +539,8 @@ body {
     max-width: 400px;
     border-radius: 8px;
     text-align: center;
+    display: flex;
+    flex-direction: column;
 }
 
 .close-main-menu {
@@ -546,6 +548,7 @@ body {
     float: right;
     font-size: 28px;
     font-weight: bold;
+    align-self: end;
 }
 
 .close-main-menu:hover,
@@ -556,7 +559,7 @@ body {
 }
 
 .menu-button {
-    background-color: #4CAF50;
+    background-color: #007bff;
     color: white;
     padding: 15px 20px;
     margin: 10px 0;
@@ -567,7 +570,17 @@ body {
 }
 
 .menu-button:hover {
-    background-color: #45a049;
+    background-color: #0271e9;
+}
+
+#clockify-button {
+    border-color: #02aaf5;
+    background-color: #fefefe;
+    border-radius: 4px;
+    color: #007bff;
+    padding: 15px 20px;
+    cursor: pointer;
+    font-size: 16px;
 }
 
 .app-info {
@@ -675,7 +688,7 @@ body {
 .loading-text {
     font-size: 24px;
     font-weight: bold;
-    color: #3498db;
+    color: #007bff;
 }
 
 .dot {
@@ -704,4 +717,50 @@ body {
     100% {
         opacity: 0;
     }
+}
+
+#forgot-password {
+    display: block;
+    margin: 10px 0;
+    text-align: center;
+    color: #007bff;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#forgot-password-modal, #reset-password-container {
+    display: none;
+}
+
+.hidden {
+    display: none;
+}
+
+.project-card.remove-mode {
+    background-color: #ffdddd;
+    border: 2px solid #ff4d4d;
+    transition: background-color 0.3s, border-color 0.3s;
+}
+
+.project-card.remove-mode:hover {
+    background-color: #ffcccc;
+    border-color: #ff3333;
+    cursor: pointer;
+}
+
+/* Default style for the Remove Project button */
+#remove-project-button {
+    border: 2px solid #ff0000; /* Red border */
+    border-radius: 5px;
+    background-color: transparent; /* Transparent background */
+    color: #2c2c2c; /* Red text */
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+/* Active style when Remove Project is toggled */
+#remove-project-button.active {
+    background-color: #ff0000; /* Red background */
+    color: #ffffff; /* White text */
 }

@@ -11,6 +11,9 @@ const BADGE_EMOJIS = ['🥉', '🥈', '🥇', '🏅', '🏆', '🎖️'];
 const notificationQueue = [];
 let isNotificationActive = false;
 
+//let closeModalButton = document.querySelectorAll('.close-button');
+
+
 function updateGlobalConstants(user) {
     HOURS_IN_WORKDAY = user.workday;
     HOURS_PER_TOKEN = parseFloat(user.unittime);
@@ -92,7 +95,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const loginContainer = document.getElementById('login-container');
     const forgotPasswordLink = document.getElementById('forgot-password');
     const forgotPasswordModal = document.getElementById('forgot-password-modal');
-    const closeModalButton = document.querySelector('.close-button');
+    const closeButton = forgotPasswordModal.querySelector('.close-button');
     const sendResetLinkButton = document.getElementById('send-reset-link');
     const resetPasswordContainer = document.getElementById('reset-password-container');
     const resetPasswordForm = document.getElementById('reset-password-form');
@@ -162,7 +165,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         forgotPasswordModal.style.display = 'flex';
     });
 
-    closeModalButton.addEventListener('click', () => {
+    closeButton.addEventListener('click', () => {
         forgotPasswordModal.style.display = 'none';
     });
 
@@ -227,6 +230,9 @@ async function initializeApp() {
             updateGlobalConstants(userDetails); // Update global constants based on user details
             displayUserData(userDetails, userContainer);
             
+            // Check if Clockify is linked and update the button
+            updateClockifyButton(userDetails.ClockifyApiKey);
+
             // Set initial date display
             updateDateDisplay();
 
@@ -271,6 +277,35 @@ async function checkClockifyUpdate() {
     }
 }
 
+function updateClockifyButton(apiKey) {
+    const clockifyButton = document.getElementById('clockify-button');
+
+    if (apiKey) {
+        // Change button style and text to indicate Clockify is linked
+        clockifyButton.textContent = 'Clockify Linked';
+        clockifyButton.classList.add('linked'); // Add a class to style the button differently
+    } else {
+        // Default button style and text
+        clockifyButton.textContent = 'Link Clockify';
+        clockifyButton.classList.remove('linked');
+    }
+
+    // Add click event to preload API key if it exists
+    clockifyButton.addEventListener('click', () => {
+        const clockifyModal = document.getElementById('clockify-modal');
+        const apiKeyInput = document.getElementById('clockify-api-key');
+        
+        // Preload the API key into the input field if available
+        if (apiKey) {
+            apiKeyInput.value = apiKey;
+        } else {
+            apiKeyInput.value = ''; // Clear the input if no API key
+        }
+
+        clockifyModal.style.display = 'block'; // Show the modal
+    });
+}
+
 async function authenticateUser(username, password) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records?where=(username,eq,${username})`;
 
@@ -313,7 +348,7 @@ function displayUserData(user, container) {
 
         userImage.src = imageUrl;
     } else {
-        userImage.src = 'default-profile-image-url'; // Fallback to a default image URL if profileimage is not available
+        userImage.src = 'defaultprofile.PNG'; // Fallback to a default image URL if profileimage is not available
     }
     userImage.alt = user.username;
 
@@ -722,12 +757,12 @@ function updatePointsDisplay(newPoints) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const editButton = document.getElementById('edit-button');
-    const undoContainer = document.getElementById('undo-container');
+    const undoContainer = document.getElementById('edit-container');
     const undoButton = document.getElementById('undo-button');
     const newProjectButton = document.getElementById('new-project-button');
     const removeProjectButton = document.getElementById('remove-project-button');
     const newProjectModal = document.getElementById('new-project-modal');
-    const closeModalButton = document.querySelector('.close-button');
+    const closeButton = newProjectModal.querySelector('.close-button');
     const newProjectForm = document.getElementById('new-project-form');
 
     // Initially hide the undo container and modal
@@ -747,7 +782,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newProjectModal.style.display = 'block';
     });
 
-    closeModalButton.addEventListener('click', () => {
+    closeButton.addEventListener('click', () => {
         newProjectModal.style.display = 'none';
     });
 
@@ -785,7 +820,7 @@ function toggleEditMode() {
         }
     });
 
-    const undoContainer = document.getElementById('undo-container');
+    const undoContainer = document.getElementById('edit-container');
     undoContainer.style.display = isEditing ? 'flex' : 'none';
 }
 
@@ -1206,7 +1241,7 @@ function updateBadgesDisplay(badges) {
 function initializeModal() {
     const userImage = document.querySelector('.user-card img');
     const modal = document.getElementById('stats-modal');
-    const closeButton = document.querySelector('.close-buton');
+    const closeButton = modal.querySelector('.close-button');
     const totalPointsElement = document.getElementById('total-points');
     const totalSkullsElement = document.getElementById('total-skulls');
 
@@ -1255,21 +1290,21 @@ function displayNextNotification() {
 
 document.addEventListener('DOMContentLoaded', () => {
     const menuIcon = document.getElementById('menu-icon');
-    const mainMenuModal = document.getElementById('main-menu-modal');
-    const closeMainMenu = document.querySelector('.close-main-menu');
+    const modal = document.getElementById('main-menu-modal');
+    const closeButton = modal.querySelector('.close-button');
     const logoutButton = document.getElementById('logout-button');
 
     menuIcon.addEventListener('click', () => {
-        mainMenuModal.style.display = 'block';
+        modal.style.display = 'block';
     });
 
-    closeMainMenu.addEventListener('click', () => {
-        mainMenuModal.style.display = 'none';
+    closeButton.addEventListener('click', () => {
+        modal.style.display = 'none';
     });
 
     window.addEventListener('click', (event) => {
-        if (event.target === mainMenuModal) {
-            mainMenuModal.style.display = 'none';
+        if (event.target === modal) {
+            modal.style.display = 'none';
         }
     });
 
@@ -1513,6 +1548,12 @@ document.addEventListener('DOMContentLoaded', () => {
         clockifyModal.style.display = 'none';
     });
 
+    window.addEventListener('click', (event) => {
+        if (event.target === clockifyModal) {
+            clockifyModal.style.display = 'none';
+        }
+    });
+
     saveClockifyKeyButton.addEventListener('click', async () => {
         const apiKey = document.getElementById('clockify-api-key').value;
         if (!apiKey) {
@@ -1578,8 +1619,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return await response.json();
     }
 
-   
-
 /*      async function fetchExistingProjectByClockifyId(clockifyProjectId) {
         const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/records?where=(ProjectID,eq,${clockifyProjectId})`;
     
@@ -1597,10 +1636,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
         const data = await response.json();
         return data.list.length > 0 ? data.list[0] : null;
-    } */
-
-
-    
+    } */    
 });
 
 async function fetchAndUpdateClockifyProjects(apiKey, clockifyUserId, workspaceId) {

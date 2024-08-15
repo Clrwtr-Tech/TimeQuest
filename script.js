@@ -650,6 +650,10 @@ function isToday(someDate) {
 
 async function sendTokenData(tokenData) {
     const url = `${baseUrls.tokenCounts.replace('/count', '')}`;
+
+    console.log('Sending data to URL:', url);
+    console.log('Token Data:', tokenData);
+
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -1156,87 +1160,6 @@ async function refetchUserDetails(userId) {
     return await response.json();
 }
 
-/* async function checkHeartsPenalty() {
-    const penaltyCheckDate = userDetails.penaltycheckdate ? new Date(userDetails.penaltycheckdate) : null;
-    const currentDate = new Date();
-    const previousDate = new Date(currentDate);
-    previousDate.setDate(currentDate.getDate() - 1);
-
-    let startDate;
-    if (penaltyCheckDate) {
-        startDate = new Date(penaltyCheckDate); // Ensure a new Date object is used
-    } else {
-        startDate = new Date(previousDate);
-        await updatePenaltyCheckDate(userDetails.Id, currentDate); // Initialize penalty check date to current date
-        return; // Exit early since penalty check date is just initialized
-    }
-
-    const workweek = userDetails.workweek || 'monday,tuesday,wednesday,thursday,friday'; // Default workweek as string
-    const dayMap = {
-        'sunday': 0,
-        'monday': 1,
-        'tuesday': 2,
-        'wednesday': 3,
-        'thursday': 4,
-        'friday': 5,
-        'saturday': 6
-    };
-    const workweekArray = workweek.toLowerCase().split(',').map(day => dayMap[day.trim()]);
-
-    let totalTokens = 0;
-    let trackedTokens = 0;
-
-    for (let date = new Date(startDate); date <= previousDate; date.setDate(date.getDate() + 1)) {
-        const dayOfWeek = date.getDay();
-        const formattedDate = date.toLocaleDateString('en-US');
-
-        if (!workweekArray.includes(dayOfWeek)) {
-            console.log(`Skipping non-working day: ${formattedDate}`);
-            continue; // Skip non-working days
-        }
-
-        const daysAgo = Math.floor((currentDate - date) / (1000 * 60 * 60 * 24));
-        const tokenCounts = await fetchDetailedTokenCountsByDate(userDetails.UserID, daysAgo);
-        
-        const dailyTotalTokens = TOKENS_PER_DAY;
-        const dailyTrackedTokens = (tokenCounts.Ontime || 0) + (tokenCounts.Late || 0) + (tokenCounts.Pto || 0);
-
-        totalTokens += dailyTotalTokens;
-        trackedTokens += dailyTrackedTokens;
-
-        const dailyTrackedPercentage = (dailyTrackedTokens / dailyTotalTokens) * 100;
-
-        console.log(`Checked date: ${formattedDate}`);
-        console.log(`Total tokens: ${dailyTotalTokens}, Tracked tokens: ${dailyTrackedTokens}, Tracked percentage: ${dailyTrackedPercentage.toFixed(2)}%`);
-
-        if (dailyTrackedPercentage < 75) {
-            console.warn(`Violation on ${formattedDate}: Tracked percentage below 75%.`);
-        }
-    }
-
-    const trackedPercentage = (trackedTokens / totalTokens) * 100;
-    console.log(`Overall tracked percentage: ${trackedPercentage.toFixed(2)}%`);
-
-    if (trackedPercentage < 75) {
-        if (userDetails.Hearts === 1) {
-            userDetails.Skull = (userDetails.Skull || 0) + 1;
-            userDetails.Hearts = 5;
-            await updateUserSkullsAndHearts(userDetails.Id, userDetails.Skull, userDetails.Hearts);
-            updateHeartsDisplay(userDetails.Hearts);
-            showNotification('Your last heart is gone 💀! Your hearts have been refilled.');
-        } else {
-            userDetails.Hearts = Math.max(userDetails.Hearts - 1, 0);
-            await updateUserHearts(userDetails.Id, userDetails.Hearts);
-            updateHeartsDisplay(userDetails.Hearts);
-            showNotification('Oh no! You lost a heart ❤️');
-        }
-    } else {
-        console.log('User met the required token tracking percentage. No heart penalty applied.');
-    }
-
-    //await updatePenaltyCheckDate(userDetails.Id, currentDate);
-} */
-
     async function checkHeartsPenalty() {
         try {
             // Retrieve the workweek data and convert it to a set of lowercase days
@@ -1329,9 +1252,8 @@ async function refetchUserDetails(userId) {
         } catch (error) {
             console.error('Error checking hearts penalty:', error);
         }
-    }
-    
-    
+}
+      
 async function updateHeartCheckDate(newDate) {
         const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
     
@@ -1354,30 +1276,7 @@ async function updateHeartCheckDate(newDate) {
         } else {
             console.log(`Heartcheck date updated to ${newDate}`);
         }
-}
-
-/* async function updatePenaltyCheckDate(userId, newDate) {
-    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
-    const patchData = {
-        Id: userId,
-        penaltycheckdate: newDate.toISOString().split('T')[0]
-    };
-
-    const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            'xc-token': token
-        },
-        body: JSON.stringify(patchData)
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to update penalty check date');
-    }
-
-    return await response.json();
-} */   
+} 
 
 async function updateUserHearts(userId, newHearts) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
@@ -1401,8 +1300,6 @@ async function updateUserHearts(userId, newHearts) {
 
     return await response.json();
 }
-
-
 
 function updateHeartsDisplay(newHearts) {
     const heartsContainer = document.querySelector('.hearts-container');
@@ -1589,6 +1486,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+
+//Listener incorporating PTO and quest submenu
 document.addEventListener('DOMContentLoaded', () => {
     const mainQuestsButton = document.getElementById('main-quests-button');
     const sideQuestsButton = document.getElementById('side-quests-button');
@@ -1627,48 +1526,124 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentTokensUsed = currentTokenCounts.Ontime + currentTokenCounts.Late + currentTokenCounts.Pto;
         const remainingTokens = TOKENS_PER_DAY - currentTokensUsed;
         let tokensToAdd = 0;
-
+    
         if (remainingTokens <= 0) {
             alert('All tokens are spent for this date.');
             return;
         }
-
+    
         if (hours === 'full') {
             tokensToAdd = Math.min(ptoLeft, remainingTokens);
+        } else if (hours === 'half') {
+            const halfDayTokens = Math.floor(TOKENS_PER_DAY / 2);
+            tokensToAdd = Math.min(ptoLeft, remainingTokens, halfDayTokens);
         } else {
             tokensToAdd = Math.min(ptoLeft, HOURS_PER_TOKEN, remainingTokens);
         }
-
+    
         if (tokensToAdd > 0) {
-            const tokenCount = hours === 'full' ? tokensToAdd : 1;
+            const tokenCount = hours === 'full' ? tokensToAdd : hours === 'half' ? tokensToAdd : 1;
             const totalTokensAdded = tokenCount;
-
-            for (let i = 0; i < tokenCount; i++) {
-                const tokenData = {
-                    Duration: HOURS_PER_TOKEN,
-                    start: displayDate.toISOString().slice(0, 10) + ' 00:00', // Assuming start time is 00:00
-                    nc_da8u___Users_id: userDetails.Id,
-                    TokenType: 'Pto',
-                    nc_da8u___Projects_id: null // No specific project ID for PTO
-                };
-
-                await sendTokenData(tokenData);
-            }
-
+    
+            // Optimistic UI update
             userDetails.PTOleft -= tokensToAdd;
-            await updateUserPTOleft(userDetails.Id, userDetails.PTOleft);
-
-            // Update user points (2 points per PTO token used)
-            userDetails.Points += totalTokensAdded * 2;
-            await updateUserPoints(userDetails.Id, userDetails.Points);
-
-            updatePointsDisplay(userDetails.Points);
-            await updateTokenOverview(displayDate, userDetails);
             updatePTOLeftDisplay();
+    
+            userDetails.Points += totalTokensAdded * 2;
+            updatePointsDisplay(userDetails.Points);
+    
+            // Update the token overview optimistically
+            await updateTokenOverviewOptimistic(tokenCount, 'Pto');
+    
+            // Adjusting the start time to the local date using the same logic as other tokens
+            const timezoneOffset = displayDate.getTimezoneOffset() * 60000; // Offset in milliseconds
+            const localDate = new Date(displayDate.getTime() - timezoneOffset);
+            const startDateTime = localDate.toISOString().slice(0, 16).replace('T', ' ');
+    
+            try {
+                for (let i = 0; i < tokenCount; i++) {
+                    const tokenData = {
+                        Duration: HOURS_PER_TOKEN,
+                        start: startDateTime,
+                        nc_da8u___Users_id: userDetails.Id,
+                        TokenType: 'Pto',
+                        nc_da8u___Projects_id: null // No specific project ID for PTO
+                    };
+    
+                    await sendTokenData(tokenData);
+                }
+            } catch (error) {
+                console.error('Failed to send PTO token data:', error);
+    
+                // Revert optimistic UI changes if the server request fails
+                userDetails.PTOleft += tokensToAdd;
+                updatePTOLeftDisplay();
+    
+                userDetails.Points -= totalTokensAdded * 2;
+                updatePointsDisplay(userDetails.Points);
+    
+                await updateTokenOverview(displayDate, userDetails);
+                alert('Failed to update PTO. Please try again.');
+            }
+    
+            // Refresh the token overview after all tokens are sent
+            await updateTokenOverview(displayDate, userDetails);
         } else {
             alert('No more PTO tokens available.');
         }
     }
+    
+    
+
+    async function updateTokenOverviewOptimistic(tokensToAdd, tokenType) {
+        const tokenOverview = document.getElementById('token-overview');
+    
+        // Update existing tokens in the token overview
+        let tokenCount = 0;
+        for (let i = 0; i < TOKENS_PER_DAY; i++) {
+            const tokenElement = tokenOverview.children[i];
+    
+            if (tokenElement.textContent === '⚪' && tokenCount < tokensToAdd) {
+                switch (tokenType) {
+                    case 'Pto':
+                        tokenElement.textContent = '🟢';
+                        break;
+                    // Handle other token types if necessary
+                    default:
+                        tokenElement.textContent = '⚪';
+                        break;
+                }
+                tokenCount++;
+            }
+        }
+    
+        // If there are extra tokens beyond the allocated slots, add them as smaller tokens
+/*         if (tokenCount < tokensToAdd) {
+            for (let i = 0; i < tokensToAdd - tokenCount; i++) {
+                const extraTokenElement = document.createElement('span');
+                extraTokenElement.classList.add('token', 'extra-token'); // Add a class for smaller tokens
+    
+                switch (tokenType) {
+                    case 'Pto':
+                        extraTokenElement.textContent = '🟢';
+                        break;
+                    // Handle other token types if necessary
+                    default:
+                        extraTokenElement.textContent = '⚪';
+                        break;
+                }
+    
+                tokenOverview.appendChild(extraTokenElement);
+            }
+        } */
+    
+        // Update the total hours tracked optimistically
+        const totalHoursText = document.getElementById('total-hours');
+        const additionalHours = tokensToAdd * HOURS_PER_TOKEN;
+        const currentTotalHours = parseFloat(totalHoursText.textContent.replace(/[^\d.-]/g, '')) || 0;
+        totalHoursText.textContent = `Total hours tracked: ${(currentTotalHours + additionalHours).toFixed(1)} hours`;
+    }
+    
 
     async function updatePTOLeftDisplay() {
         ptoLeftDisplay.textContent = `PTO left: ${userDetails.PTOleft}hrs`;

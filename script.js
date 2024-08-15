@@ -250,7 +250,14 @@ async function initializeApp() {
             initializeModal();
 
             // Check if it's time to update Clockify projects
-             await checkClockifyUpdate();
+            await checkClockifyUpdate();
+
+            // Check if workspace ID is available before calculating rank
+            if (user.nc_da8u___Workspace_id) {
+                calculateAndDisplayRank(user.nc_da8u___Workspace_id, user.Id, user.Points, document.querySelector('.namerank-container'));
+            } else {
+                console.log('Workspace ID is missing or not linked correctly.');
+            }
 
         } else {
             userContainer.textContent = 'User not found';
@@ -259,6 +266,7 @@ async function initializeApp() {
         userContainer.textContent = 'No username entered';
     }
 }
+
 
 async function checkClockifyUpdate() {
     const lastCheckDate = localStorage.getItem('lastClockifyCheck');
@@ -355,8 +363,22 @@ function displayUserData(user, container) {
     const userInfo = document.createElement('div');
     userInfo.classList.add('user-info');
 
+    // New container for username and rank
+    const nameRankContainer = document.createElement('div');
+    nameRankContainer.classList.add('namerank-container');
+    nameRankContainer.style.display = 'flex';
+    nameRankContainer.style.justifyContent = 'space-between';
+    nameRankContainer.style.width = '100%';
+
     const username = document.createElement('h2');
     username.textContent = user.username;
+
+    const rankElement = document.createElement('span');
+    rankElement.classList.add('rank');
+    rankElement.textContent = ''; // Rank will be set by calculateAndDisplayRank if applicable
+
+    nameRankContainer.appendChild(username);
+    nameRankContainer.appendChild(rankElement);
 
     const detailsContainer = document.createElement('div');
     detailsContainer.classList.add('details-container');
@@ -386,12 +408,18 @@ function displayUserData(user, container) {
     detailsContainer.appendChild(heartsContainer);
     detailsContainer.appendChild(pointsContainer);
 
-    userInfo.appendChild(username);
+    userInfo.appendChild(nameRankContainer); // Add the name and rank container
     userInfo.appendChild(detailsContainer);
 
     container.appendChild(userImage);
     container.appendChild(userInfo);
+
+    // Only calculate and display the user's rank if a workspace ID is present
+    if (user.nc_da8u___Workspace_id) {
+        calculateAndDisplayRank(user.nc_da8u___Workspace_id, user.Id, user.Points, nameRankContainer);
+    }
 }
+
 
 async function updateProjects(displayDate, userDetails) {
     const projectsContainer = document.getElementById('projects-container');
@@ -2075,3 +2103,59 @@ async function linkWorkspaceToProject(workspaceId, projectId) {
 
     return await response.json();
 }
+
+async function calculateAndDisplayRank(workspaceId, userId, userPoints, container) {
+    try {
+        // Fetch all users in the workspace
+        const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records?where=(nc_da8u___Workspace_id,eq,${workspaceId})`;
+        const response = await fetch(url, {
+            headers: {
+                'Content-Type': 'application/json',
+                'xc-token': token
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch workspace users');
+        }
+
+        const data = await response.json();
+        const users = data.list;
+
+        // Sort users by points in descending order
+        users.sort((a, b) => b.Points - a.Points);
+
+        // Find the rank of the current user
+        let userRank;
+        users.forEach((user, index) => {
+            if (user.Id === userId) {
+                userRank = index + 1; // Rank is index + 1 because index is 0-based
+            }
+        });
+
+        // Display the rank
+        const rankElement = container.querySelector('.rank');
+        if (rankElement) {
+            rankElement.textContent = `🎖️ ${userRank}${getOrdinalSuffix(userRank)}`;
+        }
+    } catch (error) {
+        console.error('Error calculating rank:', error);
+    }
+}
+
+// Helper function to get the ordinal suffix for a number
+function getOrdinalSuffix(rank) {
+    const j = rank % 10;
+    const k = rank % 100;
+    if (j === 1 && k !== 11) {
+        return 'st';
+    }
+    if (j === 2 && k !== 12) {
+        return 'nd';
+    }
+    if (j === 3 && k !== 13) {
+        return 'rd';
+    }
+    return 'th';
+}
+

@@ -171,8 +171,11 @@ input {
 .user-info {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    /* align-items: flex-start; */
+    align-items: stretch;
+    justify-content: space-between;
     flex-grow: 1;
+    padding-right: 10px;
 }
 
 .user-info h2 {
@@ -186,6 +189,8 @@ input {
     flex-direction: row; /* Can change to column if needed */
     align-items: center;
     margin-top: 10px;
+    justify-content: space-between;
+
 }
 
 .hearts-container {
@@ -199,11 +204,11 @@ input {
 .points {
     display: flex;
     align-items: baseline;
-    margin-left: 10px;
+    margin-left: 5px;
 }
 
 .points span {
-    margin-left: 5px;
+    /* margin-left: 5px; */
     font-size: 1.2em;
 }
 
@@ -771,3 +776,11 @@ input {
 .token.extra-token {
     transform: scale(0.75); /* 75% of the original size */
 }
+
+.rank {
+    /* font-weight: bolder; */
+    margin-left: 10px;
+    font-size: 1.2em;
+
+}
+

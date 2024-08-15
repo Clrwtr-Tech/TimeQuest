@@ -736,7 +736,7 @@ input {
 }
 
 .login-title-image {
-    max-width: 400px;
+    max-width: 320px;
     height: auto;
     display: block;
     margin-top: 20px;
@@ -752,4 +752,22 @@ input {
     font-size: 2em;
     color: #333;
     text-align: center;
+}
+
+#create-project-button {
+    background-color: #6ac46a; /* Default background color */
+    color: #fff; /* Default text color */
+    border: 2px solid #6ac46a; /* Default border color */
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+#create-project-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.token.extra-token {
+    transform: scale(0.75); /* 75% of the original size */
 }

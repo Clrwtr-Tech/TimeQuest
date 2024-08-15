@@ -417,7 +417,7 @@ async function updateProjects(displayDate, userDetails) {
 }
 
 function displayProjects(projects, container, editMode = false) {
-    console.log('Displaying projects:', projects); // Log the projects array
+    //console.log('Displaying projects:', projects); // Log the projects array
 
     container.innerHTML = ''; // Clear any existing content
 
@@ -493,20 +493,7 @@ async function handleProjectClick(project) {
 
     // Optimistically update the UI
     updateUIOnProjectClick(project, tokenType);
-
-     // Check if the project is a Clockify project and send the time entry
-     if (project.ClockifyProject) {
-        try {
-            const durationHours = HOURS_PER_TOKEN; // Assuming you want to track this duration
-            await sendClockifyTimeEntry(project.ProjectID, durationHours);
-        } catch (error) {
-            console.error('Error sending Clockify time entry:', error);
-            // Optionally, revert the optimistic update if the Clockify entry fails
-            // rollbackUIOnProjectClick(project);
-        }
-    }
     
-    // Send the token data to the server
     try {
         // Send token data to the database
         await sendTokenData(tokenData);
@@ -521,10 +508,10 @@ async function handleProjectClick(project) {
         // Update UI to reflect new points
         updatePointsDisplay(userDetails.Points);
 
-        // Check if the project is a Clockify project
+        // Check if the project is a Clockify project and send the time entry
         if (project.ClockifyProject) {
-            const durationHours = 0.5; // Assuming each entry is for 0.5 hours
-            sendClockifyTimeEntry(project.ProjectID, durationHours);
+            const durationHours = HOURS_PER_TOKEN; // Assuming you want to track this duration
+            await sendClockifyTimeEntry(project.ProjectID, durationHours);
         }
     } catch (error) {
         // Revert the UI changes in case of error
@@ -594,11 +581,13 @@ async function sendClockifyTimeEntry(clockifyProjectId, durationHours) {
         return;
     }
 
-    const startTime = new Date().toISOString(); // Current time in ISO 8601 format
+    // Ensure the start time reflects the displayed date
+    const displayDateTime = new Date(displayDate.getTime());
+    const startTime = displayDateTime.toISOString(); // Use displayDate instead of current date
     const durationInMilliseconds = durationHours * 3600 * 1000; // Convert duration from hours to milliseconds
 
     // Calculate end time by adding duration to start time
-    const endTime = new Date(new Date().getTime() + durationInMilliseconds).toISOString();
+    const endTime = new Date(displayDateTime.getTime() + durationInMilliseconds).toISOString();
 
     const timeEntryData = {
         start: startTime,
@@ -696,15 +685,13 @@ async function updateTokenOverview(displayDate, userDetails) {
         const totalUsedTokens = ontimeCount + lateCount + ptoCount;
         const totalHoursTracked = totalUsedTokens * HOURS_PER_TOKEN;
 
+        // Clear the token overview to remove any extra tokens from a previous date
+        tokenOverview.innerHTML = '';
+
         // Update token display
-        while (tokenOverview.children.length < TOKENS_PER_DAY) {
+        for (let i = 0; i < TOKENS_PER_DAY; i++) {
             const tokenElement = document.createElement('span');
             tokenElement.classList.add('token');
-            tokenOverview.appendChild(tokenElement);
-        }
-
-        for (let i = 0; i < TOKENS_PER_DAY; i++) {
-            const tokenElement = tokenOverview.children[i];
 
             if (i < ontimeCount) {
                 tokenElement.textContent = '🟡';
@@ -714,6 +701,20 @@ async function updateTokenOverview(displayDate, userDetails) {
                 tokenElement.textContent = '🟢';
             } else {
                 tokenElement.textContent = '⚪';
+            }
+
+            tokenOverview.appendChild(tokenElement);
+        }
+
+        // If there are additional tokens, display them smaller
+        if (totalUsedTokens > TOKENS_PER_DAY) {
+            const extraTokens = totalUsedTokens - TOKENS_PER_DAY;
+
+            for (let i = 0; i < extraTokens; i++) {
+                const extraTokenElement = document.createElement('span');
+                extraTokenElement.classList.add('token', 'extra-token');
+                extraTokenElement.textContent = '🟣'; // You can choose a different color if needed
+                tokenOverview.appendChild(extraTokenElement);
             }
         }
 
@@ -825,34 +826,144 @@ function toggleEditMode() {
 }
 
 async function removeLastToken(userId) {
-    const lastToken = await fetchLastTokenForUser(userId);
+    const undoButton = document.getElementById('undo-button');
 
-    if (!lastToken) {
-        console.log('No tokens to remove for this user.');
-        return;
+    // Disable the button and change its text
+    undoButton.disabled = true;
+    undoButton.textContent = 'Removing...';
+
+    try {
+        const lastToken = await fetchLastTokenForUser(userId);
+
+        if (!lastToken) {
+            console.log('No tokens to remove for this user.');
+            return;
+        }
+
+          // Check if the project is a Clockify project
+          if (lastToken.ClockifyProject) {
+            const clockifyRemovalSuccess = await removeLastClockifyTimeEntry(userDetails.ApiKey);
+
+            if (!clockifyRemovalSuccess) {
+                console.error('Clockify time entry removal failed. Token removal aborted.');
+                return;
+            }
+        }
+
+        const tokenId = lastToken.Id;
+        const tokenType = lastToken.TokenType; // Assuming TokenType is part of the token data
+        const projectId = lastToken.nc_da8u___Projects_id;
+
+        // Fetch the project to check if it's a Clockify project
+        const project = await fetchProjectById(projectId);
+        
+        // If the project is a Clockify project, remove the last time entry
+        if (project.ClockifyProject) {
+            await removeLastClockifyTimeEntry(userDetails.ClockifyApiKey, project.ClockifyProjectId);
+        }
+
+        // Delete the most recent token
+        await deleteToken(tokenId);
+
+        // Update user points based on the token type
+        let pointsToRemove = 1; // Default points to remove for a Late token
+        if (lastToken.TokenType === 'Ontime') {
+            pointsToRemove = 2; // Assume 2 points for Ontime tokens
+        } else if (lastToken.TokenType === 'Pto') {
+            pointsToRemove = 2; // PTO tokens worth 2 points
+        }
+
+
+        userDetails.Points -= pointsToRemove;
+        await updateUserPoints(userDetails.Id, userDetails.Points);
+
+        // Update the UI
+        await updateProjects(displayDate, userDetails);
+        await updateTokenOverview(displayDate, userDetails);
+        await updatePointsDisplay(userDetails.Points);
+
+    } catch (error) {
+        console.error('Error removing the last token:', error);
+        alert('Failed to remove the token. Please try again.');
+    } finally {
+        // Re-enable the button and reset its text
+        undoButton.disabled = false;
+        undoButton.textContent = 'Undo Last Token';
+    }
+}
+
+async function fetchProjectById(projectId) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/records/${projectId}`;
+    const response = await fetch(url, {
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch project details');
     }
 
-    const tokenId = lastToken.Id;
-    const tokenType = lastToken.TokenType; // Assuming TokenType is part of the token data
+    return await response.json();
+}
 
-    //console.log(`Attempting to delete token with ID: ${tokenId} and TokenType: ${tokenType}`);
+function getCreationTimeFromObjectId(objectId) {
+    const timestampHex = objectId.substring(0, 8);
+    const timestamp = parseInt(timestampHex, 16);
+    return new Date(timestamp * 1000); // Convert to milliseconds and create a Date object
+}
 
-    // Delete the most recent token
-    await deleteToken(tokenId);
+async function removeLastClockifyTimeEntry(apiKey) {
+    try {
+        const url = `https://api.clockify.me/api/v1/workspaces/${userDetails.ClockifyWorkspaceId}/user/${userDetails.ClockifyUserId}/time-entries?hydrated=true`;
 
-    // Update points based on token type
-    let pointsToRemove = 1; // Default points to remove for a Late token
-    if (tokenType === 'Ontime') {
-        pointsToRemove = 2; // Assume 2 points for Ontime tokens
+        const response = await fetch(url, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Api-Key': apiKey
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch Clockify time entries');
+        }
+
+        const timeEntries = await response.json();
+
+        // Log the entire response for debugging purposes
+        console.log('Fetched time entries with hydration:', timeEntries);
+
+        if (!Array.isArray(timeEntries) || timeEntries.length === 0) {
+            console.log('No time entries found for the user.');
+            return;
+        }
+
+        // Sort time entries by creation time extracted from ObjectId, descending
+        timeEntries.sort((a, b) => getCreationTimeFromObjectId(b.id) - getCreationTimeFromObjectId(a.id));
+
+        // Get the most recently created time entry
+        const lastTimeEntry = timeEntries[0];
+        console.log('Last time entry based on creation time:', lastTimeEntry); // Log the last time entry for debugging
+
+        const deleteUrl = `https://api.clockify.me/api/v1/workspaces/${userDetails.ClockifyWorkspaceId}/time-entries/${lastTimeEntry.id}`;
+        const deleteResponse = await fetch(deleteUrl, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Api-Key': apiKey
+            }
+        });
+
+        if (!deleteResponse.ok) {
+            throw new Error('Failed to delete Clockify time entry');
+        }
+
+        console.log('Successfully deleted the last Clockify time entry.');
+
+    } catch (error) {
+        console.error('Error removing Clockify time entry:', error);
     }
-
-    userDetails.Points -= pointsToRemove;
-    await updateUserPoints(userDetails.Id, userDetails.Points);
-
-    // Update the UI
-    await updateProjects(displayDate, userDetails);
-    await updateTokenOverview(displayDate, userDetails);
-    await updatePointsDisplay(userDetails.Points);
 }
 
 async function deleteToken(tokenId) {
@@ -942,42 +1053,67 @@ function generateProjectID(name) {
 }
 
 async function createNewProject(projectName) {
-    const workspaceId = await fetchWorkspaceId();
-    const projectId = generateProjectID(projectName);
+    const createProjectButton = document.getElementById('create-project-button');
+    const projectNameInput = document.getElementById('project-name');
 
-    const projectData = {
-        Name: projectName,
-        ProjectID: projectId,
-        Archived: false,
-        nc_da8u___Workspace_id: workspaceId
-    };
+    // Disable the button to prevent multiple submissions
+    createProjectButton.disabled = true;
+    createProjectButton.textContent = 'Creating...';
+    createProjectButton.style.backgroundColor = '#fff';
+    createProjectButton.style.borderColor = '#333'; // Change to desired color
+    createProjectButton.style.color = '#333';
 
-    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/records`;
+    try {
+        const workspaceId = await fetchWorkspaceId();
+        const projectId = generateProjectID(projectName);
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'xc-token': token
-        },
-        body: JSON.stringify(projectData)
-    });
+        const projectData = {
+            Name: projectName,
+            ProjectID: projectId,
+            Archived: false,
+            nc_da8u___Workspace_id: workspaceId
+        };
 
-    if (!response.ok) {
-        throw new Error('Failed to create new project');
+        const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mioix65cygxjway/records`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'xc-token': token
+            },
+            body: JSON.stringify(projectData)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to create new project');
+        }
+        const newProject = await response.json();
+        console.log('New project created:', newProject);
+
+        // Link the new project with the current user
+        await linkUserToProject(userDetails.Id, newProject.Id);
+
+        // Re-fetch the updated user details
+        userDetails = await refetchUserDetails(userDetails.Id);
+
+        // Update the projects display
+        await updateProjects(displayDate, userDetails);
+        
+    } catch (error) {
+        console.error('Error creating project:', error);
+        alert('Failed to create project. Please try again.');
+    } finally {
+        // Re-enable the button and reset the appearance
+        createProjectButton.disabled = false;
+        createProjectButton.textContent = 'Create Project';
+        createProjectButton.style.backgroundColor = ''; // Reset to default
+        createProjectButton.style.borderColor = ''; // Reset to default
+        createProjectButton.style.color = ''; // Reset to default
+
+        // Clear the input field
+        projectNameInput.value = '';
     }
-
-    const newProject = await response.json();
-    //console.log('New project created:', newProject);
-
-    // Link the new project with the current user
-    await linkUserToProject(userDetails.Id, newProject.Id);
-
-    // Re-fetch the updated user details
-    userDetails = await refetchUserDetails(userDetails.Id);
-
-    // Update the projects display
-    await updateProjects(displayDate, userDetails);
 }
 
 async function linkUserToProject(userId, projectId) {
@@ -1020,7 +1156,7 @@ async function refetchUserDetails(userId) {
     return await response.json();
 }
 
-async function checkHeartsPenalty() {
+/* async function checkHeartsPenalty() {
     const penaltyCheckDate = userDetails.penaltycheckdate ? new Date(userDetails.penaltycheckdate) : null;
     const currentDate = new Date();
     const previousDate = new Date(currentDate);
@@ -1028,10 +1164,11 @@ async function checkHeartsPenalty() {
 
     let startDate;
     if (penaltyCheckDate) {
-        startDate = penaltyCheckDate;
+        startDate = new Date(penaltyCheckDate); // Ensure a new Date object is used
     } else {
-        startDate = previousDate;
+        startDate = new Date(previousDate);
         await updatePenaltyCheckDate(userDetails.Id, currentDate); // Initialize penalty check date to current date
+        return; // Exit early since penalty check date is just initialized
     }
 
     const workweek = userDetails.workweek || 'monday,tuesday,wednesday,thursday,friday'; // Default workweek as string
@@ -1046,23 +1183,39 @@ async function checkHeartsPenalty() {
     };
     const workweekArray = workweek.toLowerCase().split(',').map(day => dayMap[day.trim()]);
 
-    // Fetch token counts for each date from startDate to previousDate
     let totalTokens = 0;
     let trackedTokens = 0;
 
     for (let date = new Date(startDate); date <= previousDate; date.setDate(date.getDate() + 1)) {
         const dayOfWeek = date.getDay();
+        const formattedDate = date.toLocaleDateString('en-US');
+
         if (!workweekArray.includes(dayOfWeek)) {
+            console.log(`Skipping non-working day: ${formattedDate}`);
             continue; // Skip non-working days
         }
 
         const daysAgo = Math.floor((currentDate - date) / (1000 * 60 * 60 * 24));
         const tokenCounts = await fetchDetailedTokenCountsByDate(userDetails.UserID, daysAgo);
-        totalTokens += TOKENS_PER_DAY;
-        trackedTokens += (tokenCounts.Ontime || 0) + (tokenCounts.Late || 0);
+        
+        const dailyTotalTokens = TOKENS_PER_DAY;
+        const dailyTrackedTokens = (tokenCounts.Ontime || 0) + (tokenCounts.Late || 0) + (tokenCounts.Pto || 0);
+
+        totalTokens += dailyTotalTokens;
+        trackedTokens += dailyTrackedTokens;
+
+        const dailyTrackedPercentage = (dailyTrackedTokens / dailyTotalTokens) * 100;
+
+        console.log(`Checked date: ${formattedDate}`);
+        console.log(`Total tokens: ${dailyTotalTokens}, Tracked tokens: ${dailyTrackedTokens}, Tracked percentage: ${dailyTrackedPercentage.toFixed(2)}%`);
+
+        if (dailyTrackedPercentage < 75) {
+            console.warn(`Violation on ${formattedDate}: Tracked percentage below 75%.`);
+        }
     }
 
     const trackedPercentage = (trackedTokens / totalTokens) * 100;
+    console.log(`Overall tracked percentage: ${trackedPercentage.toFixed(2)}%`);
 
     if (trackedPercentage < 75) {
         if (userDetails.Hearts === 1) {
@@ -1077,11 +1230,154 @@ async function checkHeartsPenalty() {
             updateHeartsDisplay(userDetails.Hearts);
             showNotification('Oh no! You lost a heart ❤️');
         }
+    } else {
+        console.log('User met the required token tracking percentage. No heart penalty applied.');
     }
 
-    // Update penalty check date to current date
-    await updatePenaltyCheckDate(userDetails.Id, currentDate);
+    //await updatePenaltyCheckDate(userDetails.Id, currentDate);
+} */
+
+    async function checkHeartsPenalty() {
+        try {
+            // Retrieve the workweek data and convert it to a set of lowercase days
+            const workweek = userDetails.workweek.toLowerCase().split(',').map(day => day.trim());
+            const workweekSet = new Set(workweek);
+    
+            // Retrieve heartcheck date and set it to the start of the day
+            let heartCheckDate = new Date(userDetails.heartcheck);
+            heartCheckDate.setHours(0, 0, 0, 0);
+    
+            // Set yesterday's date to the start of the day
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            yesterday.setHours(0, 0, 0, 0);
+    
+            // Ensure heartCheckDate is the day after the last check (inclusive)
+            heartCheckDate.setDate(heartCheckDate.getDate() + 1);
+    
+            // If heartCheckDate is after yesterday, no need to check further
+            if (heartCheckDate > yesterday) {
+                console.log('No days to check as heartcheck date is after yesterday.');
+                return;
+            }
+    
+            let currentDate = new Date(heartCheckDate);
+            let heartLost = false;
+    
+            while (currentDate <= yesterday) {
+                const dayName = currentDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    
+                // Skip non-working days
+                if (!workweekSet.has(dayName)) {
+                    console.log(`Skipping non-working day: ${dayName}`);
+                    currentDate.setDate(currentDate.getDate() + 1);
+                    continue;
+                }
+    
+                const daysAgo = Math.floor((new Date() - currentDate) / (1000 * 60 * 60 * 24));
+    
+                // Fetch token counts for the current date
+                const tokenCounts = await fetchDetailedTokenCountsByDate(userDetails.UserID, daysAgo);
+    
+                const totalTrackedTokens = (tokenCounts.Ontime || 0) + (tokenCounts.Late || 0) + (tokenCounts.Pto || 0);
+    
+                const options = { month: 'short', day: 'numeric', year: 'numeric' };
+                const formattedDate = currentDate.toLocaleDateString('en-US', options);
+    
+                // Calculate the percentage of tokens tracked
+                const percentageTracked = (totalTrackedTokens / TOKENS_PER_DAY) * 100;
+    
+                // Check if the percentage tracked is below 75%
+                if (percentageTracked < 75 && !heartLost) {
+                    console.log(`Date: ${formattedDate} - Tokens tracked: ${totalTrackedTokens} (${percentageTracked.toFixed(2)}%) - Below 75%`);
+    
+                    // Lose a heart
+                    userDetails.Hearts -= 1;
+                    heartLost = true;
+    
+                    // Check if user has lost all hearts
+                    if (userDetails.Hearts <= 0) {
+                        userDetails.Hearts = 5; // Reset hearts to 5
+                        userDetails.Skull = (userDetails.Skull || 0) + 1; // Increment skull count
+                        console.log('User lost all hearts! A skull has been added, and hearts reset to 5.');
+    
+                        // Update the user details in the database
+                        await updateUserSkullsAndHearts(userDetails.Id, userDetails.Skull, userDetails.Hearts);
+    
+                        // Show skull notification
+                        showNotification("Your last heart is gone 💀! Your hearts have been refilled.");
+                    } else {
+                        // Update the user details in the database
+                        await updateUserHearts(userDetails.Id, userDetails.Hearts);
+    
+                        // Show heart loss notification
+                        showNotification("Oh no! You lost a heart ❤️");
+                    }
+    
+                    // Update the hearts display in the UI
+                    updateHeartsDisplay(userDetails.Hearts);
+                }
+    
+                // Move to the next day
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+    
+            // Update the heartcheck date to today after checking all the dates
+            const today = new Date();
+            await updateHeartCheckDate(today.toISOString().split('T')[0]);
+    
+        } catch (error) {
+            console.error('Error checking hearts penalty:', error);
+        }
+    }
+    
+    
+async function updateHeartCheckDate(newDate) {
+        const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
+    
+        const patchData = {
+            Id: userDetails.Id,
+            heartcheck: newDate
+        };
+    
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'xc-token': token
+            },
+            body: JSON.stringify(patchData)
+        });
+    
+        if (!response.ok) {
+            console.error('Failed to update heartcheck date');
+        } else {
+            console.log(`Heartcheck date updated to ${newDate}`);
+        }
 }
+
+/* async function updatePenaltyCheckDate(userId, newDate) {
+    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
+    const patchData = {
+        Id: userId,
+        penaltycheckdate: newDate.toISOString().split('T')[0]
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'xc-token': token
+        },
+        body: JSON.stringify(patchData)
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to update penalty check date');
+    }
+
+    return await response.json();
+} */   
 
 async function updateUserHearts(userId, newHearts) {
     const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
@@ -1106,28 +1402,7 @@ async function updateUserHearts(userId, newHearts) {
     return await response.json();
 }
 
-async function updatePenaltyCheckDate(userId, newDate) {
-    const url = `https://nocodb-production-fc9f.up.railway.app/api/v2/tables/mgb2oyswnowx1zd/records`;
-    const patchData = {
-        Id: userId,
-        penaltycheckdate: newDate.toISOString().split('T')[0]
-    };
 
-    const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            'xc-token': token
-        },
-        body: JSON.stringify(patchData)
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to update penalty check date');
-    }
-
-    return await response.json();
-}
 
 function updateHeartsDisplay(newHearts) {
     const heartsContainer = document.querySelector('.hearts-container');
@@ -1506,6 +1781,7 @@ async function updatePassword(userId, newPassword) {
 }
 
 async function handleProjectRemoval(project) {
+    const removeProjectButton = document.getElementById('remove-project-button');
     const confirmed = confirm(`Are you sure you want to remove the project "${project.Name}"?`);
 
     if (!confirmed) return;
@@ -1525,10 +1801,11 @@ async function handleProjectRemoval(project) {
     });
 
     if (response.ok) {
-        alert(`Project "${project.Name}" has been removed.`);
+        //alert(`Project "${project.Name}" has been removed.`);
         // Re-fetch the user details to update the project list
         userDetails = await refetchUserDetails(userId);
         await updateProjects(displayDate, userDetails);
+        removeProjectButton.classList.remove('active');
     } else {
         alert(`Failed to remove the project "${project.Name}".`);
     }
